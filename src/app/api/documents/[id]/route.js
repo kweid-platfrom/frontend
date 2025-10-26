@@ -1,4 +1,4 @@
-// app/api/documents/[id]/route.js - Get single document
+// app/api/documents/[id]/route.js
 export async function GET(request, { params }) {
     try {
         const session = await getServerSession(authOptions);
@@ -21,13 +21,21 @@ export async function GET(request, { params }) {
             );
         }
 
-        const result = await firestoreService.getDocument(
-            id,
-            suiteId,
-            sprintId
-        );
+        // Get metadata from Firestore
+        const result = await firestoreService.getDocument(id, suiteId, sprintId);
 
         if (result.success) {
+            // Optionally: Fetch actual content from Google Docs if needed
+            if (result.data.googleDoc?.docId) {
+                try {
+                    const googleDoc = await googleDocsService.getDocument(result.data.googleDoc.docId);
+                    result.data.content = googleDoc.content; // Only fetch when explicitly needed
+                } catch (err) {
+                    console.warn('Failed to fetch Google Doc content:', err);
+                    // Continue without content - metadata is still valid
+                }
+            }
+            
             return NextResponse.json(result);
         } else {
             return NextResponse.json(result, { status: 404 });

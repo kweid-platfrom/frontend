@@ -355,7 +355,7 @@ export class AssetService extends BaseFirestoreService {
 
     async getRecordingStatistics(suiteId, sprintId = null) {
         const recordings = await this.getRecordings(suiteId, sprintId, { includeAll: true });
-        
+
         if (!recordings.success) {
             return recordings;
         }
@@ -910,6 +910,333 @@ export class AssetService extends BaseFirestoreService {
 
     async getRecommendation(recommendationId, suiteId, sprintId = null, skipValidation = false) {
         return await this.getSuiteAsset(suiteId, 'recommendations', recommendationId, sprintId, skipValidation);
+    }
+
+    // ========================
+    // DOCUMENTS METHODS - ADDED MISSING METHODS
+    // ========================
+
+    async createDocument(suiteId, documentData, sprintId = null, skipValidation = false) {
+        return await this.createSuiteAsset(suiteId, 'documents', documentData, sprintId, skipValidation);
+    }
+
+    async getDocument(documentId, suiteId, sprintId = null, skipValidation = false) {
+        return await this.getSuiteAsset(suiteId, 'documents', documentId, sprintId, skipValidation);
+    }
+
+    async getDocuments(suiteId, sprintId = null, options = {}) {
+        const defaultOptions = {
+            excludeStatus: options.excludeStatus || (options.includeAll ? [] : ['deleted', 'archived']),
+            includeStatus: options.includeStatus,
+            includeAll: options.includeAll,
+            skipValidation: options.skipValidation || false,
+            ...options
+        };
+        return await this.getSuiteAssets(suiteId, 'documents', sprintId, defaultOptions);
+    }
+
+    async updateDocument(documentId, updates, suiteId, sprintId = null, skipValidation = false) {
+        return await this.updateSuiteAsset(suiteId, 'documents', documentId, updates, sprintId, skipValidation);
+    }
+
+    async deleteDocument(documentId, suiteId, sprintId = null, skipValidation = false) {
+        return await this.deleteSuiteAsset(suiteId, 'documents', documentId, sprintId, skipValidation);
+    }
+
+    subscribeToDocuments(suiteId, callback, errorCallback = null, sprintId = null, options = {}) {
+        return this.subscribeToSuiteAssets(suiteId, 'documents', (documents) => {
+            let filteredDocuments = documents;
+
+            if (!options.includeAll) {
+                const excludeStatuses = options.excludeStatus || ['deleted', 'archived'];
+                filteredDocuments = documents.filter(doc =>
+                    !excludeStatuses.includes(doc.status)
+                );
+            }
+
+            callback(filteredDocuments);
+        }, errorCallback, sprintId, options);
+    }
+
+    // Document-specific helper methods
+    async searchDocuments(suiteId, searchQuery, sprintId = null) {
+        const documentsResult = await this.getDocuments(suiteId, sprintId, { includeAll: false });
+
+        if (!documentsResult.success) {
+            return documentsResult;
+        }
+
+        const searchLower = searchQuery.toLowerCase();
+        const filtered = documentsResult.data.filter(doc =>
+            doc.title?.toLowerCase().includes(searchLower) ||
+            doc.content?.toLowerCase().includes(searchLower) ||
+            doc.type?.toLowerCase().includes(searchLower) ||
+            doc.tags?.some(tag => tag.toLowerCase().includes(searchLower))
+        );
+
+        return { success: true, data: filtered };
+    }
+
+    async getDocumentStatistics(suiteId, sprintId = null) {
+        const documents = await this.getDocuments(suiteId, sprintId, { includeAll: true });
+
+        if (!documents.success) {
+            return documents;
+        }
+
+        const stats = {
+            total: documents.data.length,
+            byType: {},
+            byStatus: {},
+            recentlyModified: []
+        };
+
+        documents.data.forEach(doc => {
+            stats.byType[doc.type || 'general'] = (stats.byType[doc.type || 'general'] || 0) + 1;
+            stats.byStatus[doc.status || 'draft'] = (stats.byStatus[doc.status || 'draft'] || 0) + 1;
+        });
+
+        // Get recently modified (last 7 days)
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+
+        stats.recentlyModified = documents.data
+            .filter(doc => doc.metadata?.lastModified && new Date(doc.metadata.lastModified) > weekAgo)
+            .sort((a, b) => new Date(b.metadata.lastModified) - new Date(a.metadata.lastModified))
+            .slice(0, 10);
+
+        return { success: true, data: stats };
+    }
+
+    async getDocumentVersionHistory(documentId, suiteId, sprintId = null) {
+        // This would require additional Firestore structure to track versions
+        // For now, return a placeholder
+        return {
+            success: true,
+            data: {
+                documentId,
+                versions: [],
+                message: 'Version history not yet implemented'
+            }
+        };
+    }
+
+    // ========================
+    // TEST DATA METHODS - ADDED MISSING METHODS
+    // ========================
+
+    async createTestData(suiteId, testDataData, sprintId = null, skipValidation = false) {
+        return await this.createSuiteAsset(suiteId, 'testData', testDataData, sprintId, skipValidation);
+    }
+
+    async getTestDataById(dataId, suiteId, sprintId = null, skipValidation = false) {
+        return await this.getSuiteAsset(suiteId, 'testData', dataId, sprintId, skipValidation);
+    }
+
+    async getTestData(suiteId, sprintId = null, options = {}) {
+        const defaultOptions = {
+            excludeStatus: options.excludeStatus || (options.includeAll ? [] : ['deleted', 'archived']),
+            includeStatus: options.includeStatus,
+            includeAll: options.includeAll,
+            skipValidation: options.skipValidation || false,
+            ...options
+        };
+        return await this.getSuiteAssets(suiteId, 'testData', sprintId, defaultOptions);
+    }
+
+    async updateTestData(dataId, updates, suiteId, sprintId = null, skipValidation = false) {
+        return await this.updateSuiteAsset(suiteId, 'testData', dataId, updates, sprintId, skipValidation);
+    }
+
+    async deleteTestData(dataId, suiteId, sprintId = null, skipValidation = false) {
+        return await this.deleteSuiteAsset(suiteId, 'testData', dataId, sprintId, skipValidation);
+    }
+
+    subscribeToTestData(suiteId, callback, errorCallback = null, sprintId = null, options = {}) {
+        return this.subscribeToSuiteAssets(suiteId, 'testData', (testData) => {
+            let filteredTestData = testData;
+
+            if (!options.includeAll) {
+                const excludeStatuses = options.excludeStatus || ['deleted', 'archived'];
+                filteredTestData = testData.filter(data =>
+                    !excludeStatuses.includes(data.status)
+                );
+            }
+
+            callback(filteredTestData);
+        }, errorCallback, sprintId, options);
+    }
+
+    // Test Data specific helper methods
+    async bulkImportTestData(suiteId, testDataArray, sprintId = null) {
+        const results = [];
+        const errors = [];
+
+        for (const data of testDataArray) {
+            try {
+                const result = await this.createTestData(suiteId, data, sprintId, true);
+                if (result.success) {
+                    results.push(result.data);
+                } else {
+                    errors.push({ data, error: result.error });
+                }
+            } catch (error) {
+                errors.push({ data, error: { message: error.message } });
+            }
+        }
+
+        return {
+            success: errors.length === 0,
+            data: {
+                imported: results.length,
+                failed: errors.length,
+                results,
+                errors
+            }
+        };
+    }
+
+    async exportTestData(suiteId, format = 'json', sprintId = null) {
+        const testData = await this.getTestData(suiteId, sprintId, { includeAll: false });
+
+        if (!testData.success) {
+            return testData;
+        }
+
+        if (format === 'json') {
+            return {
+                success: true,
+                data: JSON.stringify(testData.data, null, 2),
+                mimeType: 'application/json'
+            };
+        } else if (format === 'csv') {
+            // Basic CSV export
+            if (testData.data.length === 0) {
+                return { success: true, data: '', mimeType: 'text/csv' };
+            }
+
+            const headers = Object.keys(testData.data[0]);
+            const csv = [
+                headers.join(','),
+                ...testData.data.map(row =>
+                    headers.map(header => JSON.stringify(row[header] || '')).join(',')
+                )
+            ].join('\n');
+
+            return {
+                success: true,
+                data: csv,
+                mimeType: 'text/csv'
+            };
+        }
+
+        return {
+            success: false,
+            error: { message: `Unsupported export format: ${format}` }
+        };
+    }
+
+    async validateTestData(testDataData) {
+        const errors = [];
+
+        if (!testDataData.name || testDataData.name.trim() === '') {
+            errors.push('Name is required');
+        }
+
+        if (!testDataData.type) {
+            errors.push('Type is required');
+        }
+
+        if (!testDataData.data || typeof testDataData.data !== 'object') {
+            errors.push('Data must be an object');
+        }
+
+        return {
+            success: errors.length === 0,
+            errors,
+            isValid: errors.length === 0
+        };
+    }
+
+    async duplicateTestData(dataId, suiteId, sprintId = null) {
+        const original = await this.getTestDataById(dataId, suiteId, sprintId, true);
+
+        if (!original.success) {
+            return original;
+        }
+
+        const duplicate = {
+            ...original.data,
+            name: `${original.data.name} (Copy)`,
+            created_at: new Date(),
+            updated_at: new Date()
+        };
+
+        delete duplicate.id;
+
+        return await this.createTestData(suiteId, duplicate, sprintId, true);
+    }
+
+    async mergeTestData(sourceIds, suiteId, sprintId = null, newName = 'Merged Test Data') {
+        const mergedData = {};
+
+        for (const id of sourceIds) {
+            const result = await this.getTestDataById(id, suiteId, sprintId, true);
+            if (result.success) {
+                Object.assign(mergedData, result.data.data || {});
+            }
+        }
+
+        const merged = {
+            name: newName,
+            type: 'merged',
+            data: mergedData,
+            sourceIds,
+            status: 'active'
+        };
+
+        return await this.createTestData(suiteId, merged, sprintId, true);
+    }
+
+    async searchTestData(suiteId, searchQuery, sprintId = null) {
+        const testDataResult = await this.getTestData(suiteId, sprintId, { includeAll: false });
+
+        if (!testDataResult.success) {
+            return testDataResult;
+        }
+
+        const searchLower = searchQuery.toLowerCase();
+        const filtered = testDataResult.data.filter(data =>
+            data.name?.toLowerCase().includes(searchLower) ||
+            data.type?.toLowerCase().includes(searchLower) ||
+            data.description?.toLowerCase().includes(searchLower) ||
+            JSON.stringify(data.data).toLowerCase().includes(searchLower)
+        );
+
+        return { success: true, data: filtered };
+    }
+
+    async getTestDataStatistics(suiteId, sprintId = null) {
+        const testData = await this.getTestData(suiteId, sprintId, { includeAll: true });
+
+        if (!testData.success) {
+            return testData;
+        }
+
+        const stats = {
+            total: testData.data.length,
+            byType: {},
+            byStatus: {},
+            totalSize: 0
+        };
+
+        testData.data.forEach(data => {
+            stats.byType[data.type || 'unknown'] = (stats.byType[data.type || 'unknown'] || 0) + 1;
+            stats.byStatus[data.status || 'active'] = (stats.byStatus[data.status || 'active'] || 0) + 1;
+            stats.totalSize += JSON.stringify(data.data || {}).length;
+        });
+
+        return { success: true, data: stats };
     }
 
     // ========================

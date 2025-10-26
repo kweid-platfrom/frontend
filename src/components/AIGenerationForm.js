@@ -8,8 +8,11 @@ import {
     Edit2,
     Check,
     X,
-    Sparkles
+    Sparkles,
+    Zap,
+    DollarSign
 } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 
 const AIGenerationForm = ({
     // Input step props
@@ -21,6 +24,7 @@ const AIGenerationForm = ({
     setShowAdvancedSettings,
     isGenerating,
     onGenerate,
+    canGenerate,
     // Review step props
     step,
     generatedTestCases = [],
@@ -29,7 +33,12 @@ const AIGenerationForm = ({
     setSelectedTestCases,
     generationSummary,
     onSaveSelected,
-    onBackToEdit
+    onBackToEdit,
+    // AI Tracking props
+    aiProvider = 'gemini',
+    aiModel = 'gemini-1.5-flash-latest',
+    tokensUsed = 0,
+    cost = 0,
 }) => {
     const [editingCell, setEditingCell] = useState(null);
     const [editValue, setEditValue] = useState('');
@@ -82,6 +91,19 @@ const AIGenerationForm = ({
         setEditValue('');
     };
 
+    const formatCost = (amount) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 4,
+            maximumFractionDigits: 6
+        }).format(amount || 0);
+    };
+
+    const formatNumber = (num) => {
+        return new Intl.NumberFormat().format(num || 0);
+    };
+
     const renderInputForm = () => (
         <div className="bg-card rounded-lg shadow-theme-sm border border-border p-6">
             <div className="space-y-6">
@@ -104,7 +126,7 @@ const AIGenerationForm = ({
                     />
                     <div className="mt-2 flex items-center justify-between">
                         <span className="text-xs text-muted-foreground">
-                            {prompt.length} characters
+                            {prompt?.length || 0} characters
                         </span>
                         <span className="text-xs text-muted-foreground">
                             Recommended: 200+ characters
@@ -128,7 +150,7 @@ const AIGenerationForm = ({
                             <div>
                                 <label className="block text-sm font-medium text-foreground mb-2">Format</label>
                                 <select
-                                    value={templateConfig.format}
+                                    value={templateConfig?.format || 'Given-When-Then'}
                                     onChange={(e) => handleConfigChange('format', e.target.value)}
                                     className="w-full bg-background text-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                 >
@@ -141,7 +163,7 @@ const AIGenerationForm = ({
                             <div>
                                 <label className="block text-sm font-medium text-foreground mb-2">Framework</label>
                                 <select
-                                    value={templateConfig.framework}
+                                    value={templateConfig?.framework || 'Generic'}
                                     onChange={(e) => handleConfigChange('framework', e.target.value)}
                                     className="w-full bg-background text-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                 >
@@ -157,7 +179,7 @@ const AIGenerationForm = ({
                             <label className="block text-sm font-medium text-foreground mb-2">Test Types</label>
                             <input
                                 type="text"
-                                value={templateConfig.types}
+                                value={templateConfig?.types || 'Functional, Integration, Edge Case, Negative, Performance'}
                                 onChange={(e) => handleConfigChange('types', e.target.value)}
                                 className="w-full bg-background text-foreground border border-border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                                 placeholder="Functional, Integration, Edge Case, etc."
@@ -167,7 +189,7 @@ const AIGenerationForm = ({
                         <div className="flex items-center gap-2">
                             <input
                                 type="checkbox"
-                                checked={templateConfig.includeTestData}
+                                checked={templateConfig?.includeTestData !== false}
                                 onChange={(e) => handleConfigChange('includeTestData', e.target.checked)}
                                 className="h-4 w-4 text-primary focus:ring-primary border-border rounded"
                             />
@@ -180,7 +202,7 @@ const AIGenerationForm = ({
                     <button
                         onClick={onGenerate}
                         className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-teal-500 transition-all shadow-theme-sm disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-                        disabled={isGenerating || !prompt?.trim()}
+                        disabled={isGenerating || !prompt?.trim() || !canGenerate}
                     >
                         <Wand2 size={16} />
                         {isGenerating ? 'Generating...' : 'Generate Test Cases'}
@@ -323,6 +345,10 @@ const AIGenerationForm = ({
                                                 isEditing={true}
                                                 multiline={true}
                                             />
+                                            <Badge variant="secondary" className="mt-2">
+                                                <Sparkles size={10} className="mr-1" />
+                                                AI Generated
+                                            </Badge>
                                         </td>
                                         <td className="px-3 py-4 text-xs text-foreground max-w-xs">
                                             <EditableCell
@@ -363,6 +389,39 @@ const AIGenerationForm = ({
 
     const renderReviewStep = () => (
         <div className="space-y-6">
+            {/* AI Metadata Info Card */}
+            {(aiModel || tokensUsed > 0 || cost > 0) && (
+                <div className="bg-gradient-to-r from-purple-50 to-indigo-50 rounded-lg border border-purple-200 p-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="bg-white rounded-full p-2">
+                                <Sparkles className="h-5 w-5 text-purple-600" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-semibold text-foreground">AI Generation Details</p>
+                                <p className="text-xs text-muted-foreground">Model: {aiModel}</p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <div className="text-right">
+                                <div className="flex items-center gap-1 text-sm text-foreground">
+                                    <Zap className="h-4 w-4 text-amber-500" />
+                                    <span className="font-medium">{formatNumber(tokensUsed)}</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground">tokens</p>
+                            </div>
+                            <div className="text-right">
+                                <div className="flex items-center gap-1 text-sm text-foreground">
+                                    <DollarSign className="h-4 w-4 text-green-600" />
+                                    <span className="font-medium">{formatCost(cost)}</span>
+                                </div>
+                                <p className="text-xs text-muted-foreground">cost</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {generationSummary && (
                 <div className="bg-card rounded-lg shadow-theme-sm border border-border p-6">
                     <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">

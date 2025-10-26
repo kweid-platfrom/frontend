@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Link, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { toast } from 'sonner';
 
 const RecorderActions = ({ 
@@ -13,34 +13,6 @@ const RecorderActions = ({
   hasTitle
 }) => {
   const [saving, setSaving] = useState(false);
-  const [shareLink, setShareLink] = useState(null);
-
-  const generateShareLink = () => {
-    if (shareLink) {
-      return shareLink;
-    }
-
-    if (previewUrl) {
-      const temporaryShareLink = `${window.location.origin}/recordings/preview/${Date.now()}`;
-      setShareLink(temporaryShareLink);
-      return temporaryShareLink;
-    }
-
-    return null;
-  };
-
-  const copyShareLink = () => {
-    const linkToShare = generateShareLink();
-    if (linkToShare) {
-      navigator.clipboard.writeText(linkToShare).then(() => {
-        toast.success('Recording link copied to clipboard!');
-      }).catch(() => {
-        toast.error(`Failed to copy link. URL: ${linkToShare}`);
-      });
-    } else {
-      toast.error('No recording available to share.');
-    }
-  };
 
   // FIXED: Return '0:00' as default instead of '0:30'
   const formatDuration = (seconds) => {
@@ -107,6 +79,16 @@ const RecorderActions = ({
     }
 
     setSaving(true);
+
+    // FIXED: Close modal immediately and show loading toast
+    const toastId = toast.loading('Saving recording...', {
+      description: 'Please wait while we process your recording'
+    });
+
+    // Close the modal immediately so user can continue using the app
+    if (onClose) {
+      onClose(false); // Pass false to indicate save is in progress
+    }
 
     try {
       let blob = recordingData?.blob;
@@ -277,19 +259,15 @@ const RecorderActions = ({
       if (firestoreResult.success) {
         console.log('✅ Recording saved successfully:', firestoreResult.data?.id);
 
+        // FIXED: Dismiss loading toast and show success
         toast.success('Recording saved successfully!', {
-          description: `"${recordingTitle}" (${formattedDuration}) saved with ${recordingDataToSave.consoleLogs.length} logs`,
+          id: toastId,
+          description: `"${recordingTitle}" (${formattedDuration})`,
           action: {
             label: 'View',
             onClick: () => window.open(uploadResult.data.url, '_blank')
           }
         });
-
-        setTimeout(() => {
-          if (onClose) {
-            onClose(true);
-          }
-        }, 1500);
       } else {
         console.error('❌ Firestore save failed:', firestoreResult.error);
 
@@ -308,7 +286,9 @@ const RecorderActions = ({
     } catch (err) {
       console.error('❌ Complete save operation failed:', err);
 
+      // FIXED: Dismiss loading toast and show error
       toast.error('Failed to save recording', {
+        id: toastId,
         description: err.message,
       });
     } finally {
@@ -320,39 +300,15 @@ const RecorderActions = ({
   const canSave = !saving && (previewUrl || recordingData?.blob) && hasTitle;
 
   return (
-    <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
-      <div className="text-sm text-gray-600 dark:text-gray-400">
-        {saving ? 'Saving to YouTube and database...' : (
-          !hasTitle ? (
-            <span className="text-amber-600 dark:text-amber-400 font-medium">
-              ⚠️ Title required before saving
-            </span>
-          ) : (
-            'Ready to save recording'
-          )
-        )}
-      </div>
-      <div className="flex space-x-2">
-        <button
-          onClick={copyShareLink}
-          disabled={saving}
-          className="flex items-center space-x-2 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 disabled:opacity-50 transition-colors"
-          title="Generate and copy shareable link"
-        >
-          <Link className="w-4 h-4" />
-          <span>Share</span>
-        </button>
-        <button
-          onClick={saveRecording}
-          disabled={!canSave}
-          className="flex items-center space-x-2 px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50 transition-colors"
-          title={!hasTitle ? "Enter a title before saving" : "Save recording to YouTube and database"}
-        >
-          <Save className="w-4 h-4" />
-          <span>{saving ? 'Saving...' : 'Save'}</span>
-        </button>
-      </div>
-    </div>
+    <button
+      onClick={saveRecording}
+      disabled={!canSave}
+      className="flex items-center space-x-2 px-4 py-2 bg-primary text-white rounded hover:bg-primary/90 disabled:opacity-50 transition-colors"
+      title={!hasTitle ? "Enter a title before saving" : "Save recording"}
+    >
+      <Save className="w-4 h-4" />
+      <span>{saving ? 'Saving...' : 'Save Recording'}</span>
+    </button>
   );
 };
 

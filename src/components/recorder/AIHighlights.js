@@ -13,11 +13,12 @@ import {
   TrendingUp,
   Wifi,
   Lightbulb,
-  Target
+  Target,
+  Zap
 } from 'lucide-react';
 
-// Import the AI insight service
-import aiInsightService from '../../services/AIInsightService';
+// Import the AI Context instead of service
+import { useAI } from '@/context/AIContext';
 
 const AIHighlights = ({ 
   consoleLogs = [], 
@@ -36,7 +37,12 @@ const AIHighlights = ({
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [hasAnalyzed, setHasAnalyzed] = useState(false);
   const [displayIndex, setDisplayIndex] = useState(0);
+  const [analysisError, setAnalysisError] = useState(null);
   const intervalRef = useRef(null);
+  const analysisTriggeredRef = useRef(false);
+
+  // Get AI context
+  const { generatePlainTextContent, isReady, error: aiError } = useAI();
 
   // Icon mapping for different insight types
   const iconMapping = {
@@ -51,7 +57,8 @@ const AIHighlights = ({
     TrendingUp,
     Wifi,
     Lightbulb,
-    Target
+    Target,
+    Zap
   };
 
   const formatTime = (seconds) => {
@@ -86,53 +93,216 @@ const AIHighlights = ({
     return badges[severity] || 'bg-gray-500 text-white';
   };
 
-  // Analyze existing captured issues using real AI service instead of generating new ones
-  const analyzeExistingIssues = useCallback(async () => {
-    if (hasAnalyzed || (consoleLogs.length === 0 && networkLogs.length === 0 && detectedIssues.length === 0)) {
+  // Parse AI response to extract insights
+  const parseAIInsights = (aiResponse) => {
+    try {
+      console.log('Parsing AI response...');
+      
+      // Try to extract JSON if wrapped in markdown code blocks
+      let jsonText = aiResponse.trim();
+      
+      // Remove markdown code blocks if present
+      const jsonMatch = aiResponse.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        jsonText = jsonMatch[1].trim();
+        console.log('Extracted JSON from markdown block');
+      }
+
+      const parsed = JSON.parse(jsonText);
+      console.log('Parsed JSON successfully:', parsed);
+      
+      // Validate and normalize the insights
+      if (parsed.insights && Array.isArray(parsed.insights)) {
+        console.log(`Found ${parsed.insights.length} insights`);
+        return parsed.insights.map((insight, index) => ({
+          id: insight.id || `insight_${Date.now()}_${index}`,
+          type: insight.type || 'info',
+          severity: insight.severity || 'medium',
+          title: insight.title || 'Untitled Insight',
+          description: insight.description || '',
+          time: parseFloat(insight.time) || 0,
+          icon: insight.icon || 'Lightbulb',
+          color: insight.color || 'purple',
+          confidence: parseFloat(insight.confidence) || 0.8,
+          recommendations: Array.isArray(insight.recommendations) ? insight.recommendations : [],
+          testCaseRecommendations: Array.isArray(insight.testCaseRecommendations) ? insight.testCaseRecommendations : [],
+          category: insight.category || 'general'
+        }));
+      }
+      
+      console.warn('No insights array found in parsed JSON');
+      return [];
+    } catch (error) {
+      console.error('Failed to parse AI insights:', error);
+      console.error('AI Response was:', aiResponse);
+      return [];
+    }
+  };
+
+  // Analyze recording data using AI Context
+  const analyzeRecordingWithAI = useCallback(async () => {
+    // Prevent duplicate analysis
+    if (analysisTriggeredRef.current || isAnalyzing) {
       return;
     }
 
+    // Check if there's data to analyze
+    const hasData = consoleLogs.length > 0 || networkLogs.length > 0 || detectedIssues.length > 0;
+    if (!hasData) {
+      setHasAnalyzed(true);
+      return;
+    }
+
+    // Check AI readiness
+    if (!isReady) {
+      console.warn('AI service not ready');
+      setAnalysisError('AI service is not ready. Please check your API configuration.');
+      setHasAnalyzed(true);
+      return;
+    }
+
+    analysisTriggeredRef.current = true;
     setIsAnalyzing(true);
+    setAnalysisError(null);
+
+    console.log('🤖 Starting AI analysis with:', {
+      consoleLogs: consoleLogs.length,
+      networkLogs: networkLogs.length,
+      detectedIssues: detectedIssues.length,
+      duration
+    });
 
     try {
-      // Construct recordingData as expected by analyzeRecording
-      const recordingData = {
-        id: `recording_${Date.now()}`, // Generate a temporary ID if not provided
-        duration,
-        consoleLogs,
-        networkLogs,
-        detectedIssues,
-        metadata: {
-          totalLogs: consoleLogs.length,
-          totalRequests: networkLogs.length
+      // Prepare summary of recording data
+      const errorLogs = consoleLogs.filter(log => log.type === 'error');
+      const warnLogs = consoleLogs.filter(log => log.type === 'warn');
+      const failedRequests = networkLogs.filter(log => log.status >= 400);
+      const slowRequests = networkLogs.filter(log => log.duration > 3000);
+
+      // Build analysis prompt - focused on INVESTIGATION not testing
+      const analysisPrompt = `You are a senior developer analyzing a recorded QA session. Investigate what went wrong and provide actionable debugging insights.
+
+## Recording Data Summary:
+- Duration: ${duration} seconds
+- Console Errors: ${errorLogs.length}
+- Console Warnings: ${warnLogs.length}
+- Failed Network Requests: ${failedRequests.length}
+- Slow Network Requests (>3s): ${slowRequests.length}
+- Detected Issues: ${detectedIssues.length}
+
+## Actual Errors Found:
+${errorLogs.length > 0 ? errorLogs.slice(0, 8).map(log => `[${formatTime(log.time)}] ${log.type.toUpperCase()}: ${log.message}${log.stack ? `\nStack: ${log.stack.substring(0, 200)}` : ''}`).join('\n\n') : 'No console errors'}
+
+## Failed Network Requests:
+${failedRequests.length > 0 ? failedRequests.slice(0, 8).map(req => `[${formatTime(req.time)}] ${req.method} ${req.url}
+Status: ${req.status} ${req.statusText || ''}
+${req.error ? `Error: ${req.error}` : ''}`).join('\n\n') : 'No failed requests'}
+
+## Slow Network Requests (>3s):
+${slowRequests.length > 0 ? slowRequests.slice(0, 5).map(req => `[${formatTime(req.time)}] ${req.method} ${req.url}
+Duration: ${req.duration}ms
+Status: ${req.status}`).join('\n\n') : 'No slow requests'}
+
+## Other Detected Issues:
+${detectedIssues.length > 0 ? detectedIssues.slice(0, 5).map(issue => `[${formatTime(issue.time)}] ${issue.type}: ${issue.message}${issue.details ? `\nDetails: ${JSON.stringify(issue.details)}` : ''}`).join('\n\n') : 'No other issues'}
+
+## Console Warnings:
+${warnLogs.length > 0 ? warnLogs.slice(0, 5).map(log => `[${formatTime(log.time)}] ${log.message}`).join('\n') : 'No warnings'}
+
+---
+
+**IMPORTANT**: Analyze ONLY the actual errors, failures, and issues listed above. Do NOT suggest what should be tested. Focus on:
+
+1. **Root Cause Analysis**: What likely caused each error?
+2. **Impact Assessment**: How does this affect users/functionality?
+3. **Technical Investigation**: What should developers check?
+4. **Error Patterns**: Are multiple errors related?
+5. **Performance Issues**: Why are requests slow?
+6. **Data Flow Problems**: Are there API or state management issues?
+
+For each insight, provide:
+- **What happened** (the actual error/issue)
+- **Why it likely happened** (root cause hypothesis)
+- **What to investigate** (specific debugging steps for developers)
+- **Business impact** (how this affects users)
+
+Return ONLY valid JSON in this exact format (no markdown code blocks, no explanations outside JSON):
+{
+  "insights": [
+    {
+      "id": "error_001",
+      "type": "error|warning|performance|network",
+      "severity": "critical|high|medium|low",
+      "title": "Clear description of what went wrong",
+      "description": "Detailed investigation of the root cause, impact on users, and what specifically failed. Focus on technical details developers need.",
+      "time": 0.0,
+      "icon": "AlertTriangle|Network|Clock|Code|Shield",
+      "color": "red|yellow|blue|purple",
+      "confidence": 0.85,
+      "recommendations": [
+        "Check server logs for /api/endpoint errors",
+        "Verify database connection pool settings",
+        "Review authentication token expiration"
+      ],
+      "testCaseRecommendations": [],
+      "category": "error|performance|network"
+    }
+  ]
+}
+
+Prioritize insights by severity and user impact. Include 3-10 insights maximum.`;
+
+      // Call AI service
+      const result = await generatePlainTextContent(analysisPrompt, {
+        temperature: 0.7,
+        maxTokens: 3000
+      });
+
+      console.log('AI Analysis result:', result);
+
+      if (result.success) {
+        // The response can be in result.content or result.data
+        const aiResponse = result.content || result.data;
+        
+        if (aiResponse) {
+          const parsedInsights = parseAIInsights(aiResponse);
+          
+          if (parsedInsights.length > 0) {
+            console.log(`✅ Generated ${parsedInsights.length} insights from AI`);
+            setInsights(parsedInsights);
+          } else {
+            console.warn('No valid insights parsed from AI response');
+            console.log('AI Response:', aiResponse);
+            setInsights([]);
+            setAnalysisError('Could not parse insights from AI response');
+          }
+        } else {
+          console.warn('AI response is empty');
+          setInsights([]);
+          setAnalysisError('AI returned empty response');
         }
-      };
-
-      // Use the real AI service to analyze captured data
-      const analysisResult = await aiInsightService.analyzeRecording(recordingData);
-
-      if (analysisResult.success) {
-        setInsights(analysisResult.data.insights || []);
-      } else if (analysisResult.fallbackData) {
-        setInsights(analysisResult.fallbackData.insights || []);
+        setHasAnalyzed(true);
       } else {
+        console.error('AI analysis failed:', result.error);
         setInsights([]);
+        setHasAnalyzed(true);
+        setAnalysisError(result.error || 'Failed to analyze recording');
       }
-      setHasAnalyzed(true);
     } catch (err) {
-      console.error('AI analysis failed:', err);
-      // Don't show fake insights when AI fails
+      console.error('❌ AI analysis exception:', err);
       setInsights([]);
       setHasAnalyzed(true);
+      setAnalysisError(err.message || 'Analysis failed');
     } finally {
       setIsAnalyzing(false);
     }
-  }, [consoleLogs, networkLogs, detectedIssues, duration, hasAnalyzed]);
+  }, [consoleLogs, networkLogs, detectedIssues, duration, isAnalyzing, isReady, generatePlainTextContent]);
 
   // Progressive display logic
   const startProgressiveDisplay = useCallback(() => {
     if (insights.length === 0) return;
 
+    console.log(`Starting progressive display of ${insights.length} insights`);
     setDisplayedInsights([]);
     setDisplayIndex(0);
     
@@ -174,18 +344,22 @@ const AIHighlights = ({
     }
   }, [onCreateBug]);
 
+  // Update displayed insights as index changes
   useEffect(() => {
     if (displayIndex > 0 && insights.length > 0) {
       setDisplayedInsights(insights.slice(0, displayIndex));
     }
   }, [displayIndex, insights]);
 
+  // Trigger analysis when data is available
   useEffect(() => {
-    if (consoleLogs.length > 0 || networkLogs.length > 0 || detectedIssues.length > 0) {
-      analyzeExistingIssues();
+    const hasData = consoleLogs.length > 0 || networkLogs.length > 0 || detectedIssues.length > 0;
+    if (hasData && !hasAnalyzed && !isAnalyzing) {
+      analyzeRecordingWithAI();
     }
-  }, [consoleLogs.length, networkLogs.length, detectedIssues.length, analyzeExistingIssues]);
+  }, [consoleLogs.length, networkLogs.length, detectedIssues.length, hasAnalyzed, isAnalyzing, analyzeRecordingWithAI]);
 
+  // Start progressive display when enabled
   useEffect(() => {
     if (isEnabled && hasAnalyzed && insights.length > 0) {
       startProgressiveDisplay();
@@ -198,6 +372,7 @@ const AIHighlights = ({
     }
   }, [isEnabled, hasAnalyzed, insights.length, startProgressiveDisplay]);
 
+  // Cleanup interval on unmount
   useEffect(() => {
     return () => {
       if (intervalRef.current) {
@@ -224,12 +399,33 @@ const AIHighlights = ({
     return (
       <div className={`text-center py-4 ${className}`}>
         <Brain className="w-8 h-8 mx-auto mb-2 text-purple-500 animate-pulse" />
-        <div className="text-xs text-gray-600 mb-1">Analyzing captured data...</div>
+        <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Analyzing captured data...</div>
         <div className="flex items-center justify-center space-x-1">
           <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce"></div>
-          <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce delay-100"></div>
-          <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce delay-200"></div>
+          <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+          <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
         </div>
+      </div>
+    );
+  }
+
+  if (analysisError) {
+    return (
+      <div className={`text-center py-4 ${className}`}>
+        <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-yellow-500" />
+        <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">Analysis Error</div>
+        <div className="text-[10px] text-gray-500">{analysisError}</div>
+        <button
+          onClick={() => {
+            analysisTriggeredRef.current = false;
+            setHasAnalyzed(false);
+            setAnalysisError(null);
+            analyzeRecordingWithAI();
+          }}
+          className="mt-2 text-[10px] px-3 py-1 bg-purple-100 text-purple-700 dark:bg-purple-800 dark:text-purple-300 rounded hover:bg-purple-200 dark:hover:bg-purple-700 transition-colors"
+        >
+          Retry Analysis
+        </button>
       </div>
     );
   }
@@ -241,7 +437,7 @@ const AIHighlights = ({
         <div className="flex items-center space-x-2">
           <Lightbulb className="w-4 h-4 text-purple-500" />
           <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-            AI Analysis
+            AI Insights
           </span>
           {displayedInsights.length > 0 && (
             <span className="text-xs bg-purple-100 dark:bg-purple-800 text-purple-700 dark:text-purple-300 px-1.5 py-0.5 rounded">
@@ -260,14 +456,14 @@ const AIHighlights = ({
               onClick={handleSaveInsights}
               className="text-[10px] px-2 py-1 bg-purple-100 text-purple-700 dark:bg-purple-800 dark:text-purple-300 rounded hover:bg-purple-200 dark:hover:bg-purple-700 transition-colors"
             >
-              Save
+              Save All
             </button>
           </div>
         )}
       </div>
 
       {/* Insights List */}
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 max-h-96 overflow-y-auto">
         {displayedInsights.length === 0 && insights.length === 0 ? (
           <div className="text-center py-4">
             <CheckCircle className="w-6 h-6 mx-auto mb-1 text-green-500" />
@@ -301,7 +497,7 @@ const AIHighlights = ({
                           </span>
                         </div>
                       </div>
-                      <div className="text-[11px] text-gray-600 dark:text-gray-400 mb-1 line-clamp-2">
+                      <div className="text-[11px] text-gray-600 dark:text-gray-400 mb-1">
                         {insight.description}
                       </div>
                       <div className="flex items-center justify-between text-[9px] text-gray-500 mb-1">
@@ -312,6 +508,18 @@ const AIHighlights = ({
                           </span>
                         )}
                       </div>
+                      
+                      {/* Recommendations */}
+                      {insight.recommendations && insight.recommendations.length > 0 && (
+                        <div className="mt-1 text-[10px] text-gray-600 dark:text-gray-400">
+                          <div className="font-medium mb-0.5">Recommendations:</div>
+                          <ul className="list-disc list-inside space-y-0.5">
+                            {insight.recommendations.slice(0, 2).map((rec, i) => (
+                              <li key={i}>{rec}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
                       
                       {/* Action buttons for each insight */}
                       <div className="flex items-center space-x-1 mt-1">
@@ -348,8 +556,8 @@ const AIHighlights = ({
               <div className="text-center py-2">
                 <div className="flex items-center justify-center space-x-1">
                   <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce"></div>
-                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce delay-100"></div>
-                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce delay-200"></div>
+                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                  <div className="w-1 h-1 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                 </div>
               </div>
             )}
@@ -363,8 +571,9 @@ const AIHighlights = ({
           <div className="flex justify-between">
             <span>Critical: {displayedInsights.filter(i => i.severity === 'critical').length}</span>
             <span>High: {displayedInsights.filter(i => i.severity === 'high').length}</span>
+            <span>Medium: {displayedInsights.filter(i => i.severity === 'medium').length}</span>
             <span>
-              Analyzed {displayedInsights.length}
+              {displayedInsights.length}
               {insights.length > displayedInsights.length && `/${insights.length}`}
             </span>
           </div>

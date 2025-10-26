@@ -1,112 +1,270 @@
 'use client';
 //@ts-nocheck
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
-    FileText, Plus, Search, Trash2, ExternalLink,
-    Edit, Download, Share2, Copy, MoreVertical, Loader2,
-    Tag, Clock, User, SortAsc, SortDesc, Grid, List as ListIcon, X
+    FileText, Plus, Search, Trash2,
+    Edit, Share2, Copy, MoreVertical, Loader2,
+    Tag, Clock, User, SortAsc, SortDesc, Grid, List as ListIcon, X,
+    Eye, ChevronLeft, ChevronRight, RefreshCw
 } from 'lucide-react';
 import DocumentEditor from '@/components/DocumentEditor';
+import DocumentPreview from '@/components/doc-editor/DocumentPreview';
 import { useApp } from '@/context/AppProvider';
 
 export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: propSprintId = null }) {
-    // Get context
-    const { activeSuite, actions } = useApp();
+    const { activeSuite, actions, currentUser } = useApp();
     const searchParams = useSearchParams();
-    
-    // Extract actual string IDs - handle if objects are passed
-    const suiteId = typeof propSuiteId === 'string' 
-        ? propSuiteId 
+
+    const suiteId = typeof propSuiteId === 'string'
+        ? propSuiteId
         : propSuiteId?.id || activeSuite?.id;
-        
+
     const sprintId = typeof propSprintId === 'string'
         ? propSprintId
         : propSprintId?.id || null;
-    
-    // Check if we should auto-open create mode from URL
+
     const shouldAutoCreate = searchParams?.get('create') === 'true';
-    
+
+    // State
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const [showEditor, setShowEditor] = useState(shouldAutoCreate);
+
+    // View modes: 'list', 'preview', 'edit'
+    const [viewMode, setViewMode] = useState('list');
+    const [displayMode, setDisplayMode] = useState('grid'); // grid or list display
     const [selectedDocument, setSelectedDocument] = useState(null);
+    const [loadingContent, setLoadingContent] = useState(false);
+
+    // Filters
     const [searchQuery, setSearchQuery] = useState('');
     const [filterType, setFilterType] = useState('all');
-    const [sortBy, setSortBy] = useState('created_at');
+    const [sortBy, setSortBy] = useState('updated_at');
     const [sortDirection, setSortDirection] = useState('desc');
-    const [viewMode, setViewMode] = useState('grid');
     const [selectedDocs, setSelectedDocs] = useState([]);
     const [showFilters, setShowFilters] = useState(false);
-    
-    // Log for debugging
+
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 20;
+
+    // Debug logging
     useEffect(() => {
-        console.log('DocumentsDashboard IDs:', { 
-            suiteId, 
+        console.log('📄 DocumentsDashboard mounted/updated:', {
+            suiteId,
             sprintId,
-            propSuiteId,
-            activeSuiteId: activeSuite?.id,
-            shouldAutoCreate 
+            documentsCount: documents.length,
+            loading,
+            viewMode,
+            actionsAvailable: !!actions.documents
         });
-    }, [suiteId, sprintId, propSuiteId, activeSuite, shouldAutoCreate]);
-    
-    // Auto-open editor if create=true in URL
+    }, [suiteId, sprintId, documents.length, loading, viewMode]);
+
+    // Check auto-create on mount
     useEffect(() => {
         if (shouldAutoCreate && suiteId) {
-            setShowEditor(true);
+            console.log('🆕 Auto-creating document from URL param');
+            setViewMode('edit');
             setSelectedDocument(null);
         }
     }, [shouldAutoCreate, suiteId]);
 
-    useEffect(() => {
-        if (suiteId) {
-            loadDocuments();
+    // FIXED: Load documents using proper API call
+    const loadDocuments = useCallback(async () => {
+        if (!suiteId) {
+            console.log('⚠️ No suiteId, skipping document load');
+            setLoading(false);
+            return;
         }
-    }, [suiteId, sprintId, sortBy, sortDirection]);
 
-    const loadDocuments = async () => {
-        if (!suiteId) return;
-        
+        if (!currentUser) {
+            console.log('⚠️ No authenticated user');
+            setLoading(false);
+            return;
+        }
+
+        console.log('🔄 Loading documents...', { suiteId, sprintId, sortBy, sortDirection });
+
         try {
             setLoading(true);
-            const result = await actions.documents.getDocuments(suiteId, sprintId, {
-                excludeStatus: ['deleted', 'archived'],
+            setError('');
+            
+            // Build query parameters
+            const params = new URLSearchParams({
+                suiteId,
                 orderBy: sortBy,
                 orderDirection: sortDirection
             });
 
-            if (result.success) {
-                setDocuments(result.data || []);
+            if (sprintId) {
+                params.append('sprintId', sprintId);
+            }
+
+            // Fetch documents metadata from Firestore (NO CONTENT)
+            const response = await fetch(`/api/documents?${params.toString()}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error?.message || 'Failed to load documents');
+            }
+
+            const result = await response.json();
+
+            console.log('📊 Documents load result:', {
+                success: result?.success,
+                dataCount: result?.data?.length || 0,
+                error: result?.error?.message
+            });
+
+            if (result?.success) {
+                const docs = Array.isArray(result.data) ? result.data : [];
+                console.log('✅ Documents loaded successfully:', docs.length);
+
+                // Documents now only contain metadata + Google Doc URL
+                // Content is NOT loaded here for performance
+                setDocuments(docs);
                 setError('');
             } else {
-                setError(result.error?.message || 'Failed to load documents');
+                const errorMsg = result?.error?.message || 'Failed to load documents';
+                console.error('❌ Load failed:', errorMsg);
+                setError(errorMsg);
+                setDocuments([]);
             }
         } catch (err) {
-            console.error('Error loading documents:', err);
-            setError('Failed to load documents');
+            console.error('💥 Exception loading documents:', err);
+            setError('Failed to load documents: ' + err.message);
+            setDocuments([]);
+
+            actions.ui.showNotification?.({
+                id: 'docs-load-error',
+                type: 'error',
+                message: `Failed to load documents: ${err.message}`,
+                duration: 5000
+            });
         } finally {
             setLoading(false);
         }
+    }, [suiteId, sprintId, sortBy, sortDirection, currentUser]);
+
+    // Load on mount and when dependencies change
+    useEffect(() => {
+        console.log('🎯 Load effect triggered');
+        if (suiteId && currentUser) {
+            loadDocuments();
+        }
+    }, [suiteId, sprintId, sortBy, sortDirection, loadDocuments, currentUser]);
+
+    // FIXED: Fetch document content on-demand for viewing/editing
+    const fetchDocumentWithContent = useCallback(async (doc) => {
+        if (!doc.googleDoc?.docId) {
+            console.warn('⚠️ Document has no Google Doc integration:', doc.id);
+            return doc;
+        }
+
+        console.log('📥 Fetching content for document:', doc.id);
+        setLoadingContent(true);
+
+        try {
+
+            // ✅ JUST MAKE THE REQUEST
+            const response = await fetch(`/api/docs/${doc.googleDoc.docId}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch document content');
+            }
+
+            const googleDocData = await response.json();
+
+            return {
+                ...doc,
+                content: googleDocData.content
+            };
+        } catch (err) {
+            console.error('💥 Error fetching content:', err);
+            actions.ui.showNotification?.({
+                id: 'fetch-content-error',
+                type: 'error',
+                message: `Failed to load content: ${err.message}`,
+                duration: 5000
+            });
+            return doc;
+        } finally {
+            setLoadingContent(false);
+        }
+    }, [actions.ui]); // ✅ Remove currentUser from dependencies
+
+    // Filtered documents with client-side pagination
+    const { paginatedDocuments, totalPages, totalFiltered } = useMemo(() => {
+        const filtered = documents.filter(doc => {
+            const matchesSearch =
+                doc.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                doc.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
+            const matchesType = filterType === 'all' || doc.type === filterType;
+            return matchesSearch && matchesType;
+        });
+
+        const startIndex = (currentPage - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        const paginated = filtered.slice(startIndex, endIndex);
+        const pages = Math.ceil(filtered.length / itemsPerPage);
+
+        return {
+            paginatedDocuments: paginated,
+            totalPages: pages,
+            totalFiltered: filtered.length
+        };
+    }, [documents, searchQuery, filterType, currentPage, itemsPerPage]);
+
+    const documentTypes = useMemo(() =>
+        [...new Set(documents.map(d => d.type).filter(Boolean))],
+        [documents]
+    );
+
+    // FIXED: Handlers to fetch content when needed
+    const handleView = async (doc) => {
+        console.log('👁️ Viewing document:', doc.id);
+
+        // Fetch content if not already loaded
+        const docWithContent = doc.content ? doc : await fetchDocumentWithContent(doc);
+
+        setSelectedDocument(docWithContent);
+        setViewMode('preview');
+    };
+
+    const handleEdit = async (doc) => {
+        console.log('✏️ Editing document:', doc.id);
+
+        // Fetch content if not already loaded
+        const docWithContent = doc.content ? doc : await fetchDocumentWithContent(doc);
+
+        setSelectedDocument(docWithContent);
+        setViewMode('edit');
     };
 
     const handleCreateNew = () => {
+        console.log('🆕 Creating new document');
         setSelectedDocument(null);
-        setShowEditor(true);
+        setViewMode('edit');
     };
 
-    const handleEdit = (doc) => {
-        setSelectedDocument(doc);
-        setShowEditor(true);
-    };
-
-    const handleSaveSuccess = () => {
-        setShowEditor(false);
+    const handleBackToList = () => {
+        console.log('◀️ Returning to list view');
+        setViewMode('list');
         setSelectedDocument(null);
-        loadDocuments();
-        
-        // Clear the create parameter from URL if present
+
+        // Clear URL param if present
         if (shouldAutoCreate && window.history.replaceState) {
             const url = new URL(window.location.href);
             url.searchParams.delete('create');
@@ -114,58 +272,75 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
         }
     };
 
+    const handleSaveSuccess = () => {
+        console.log('💾 Document saved, refreshing list...');
+        handleBackToList();
+        // Reload documents immediately
+        loadDocuments();
+    };
+
+    const handleRefresh = () => {
+        console.log('🔄 Manual refresh triggered');
+        loadDocuments();
+    };
+
     const handleDelete = async (docId) => {
         if (!confirm('Move this document to trash?')) return;
 
+        console.log('🗑️ Deleting document:', docId);
         try {
             const result = await actions.documents.deleteDocument(docId, suiteId, sprintId);
-            if (result.success) {
-                loadDocuments();
+            if (result?.success) {
+                console.log('✅ Document deleted');
+                if (viewMode === 'preview' || viewMode === 'edit') {
+                    handleBackToList();
+                }
+                loadDocuments(); // Refresh list
+            } else {
+                console.error('❌ Delete failed:', result?.error);
             }
         } catch (err) {
-            console.error('Error deleting document:', err);
+            console.error('💥 Delete exception:', err);
         }
     };
 
     const handleDuplicate = async (doc) => {
-        try {
-            const result = await actions.documents.createDocument({
-                title: `${doc.title} (Copy)`,
-                content: doc.content,
-                type: doc.type,
-                tags: doc.tags || []
-            }, suiteId, sprintId);
+        console.log('📋 Duplicating document:', doc.id);
 
-            if (result.success) {
-                loadDocuments();
+        try {
+            // Fetch content first if not already loaded
+            const docWithContent = doc.content ? doc : await fetchDocumentWithContent(doc);
+
+            // Create duplicate with content
+            const result = await actions.documents.createDocument(
+                suiteId,
+                {
+                    title: `${doc.title} (Copy)`,
+                    content: docWithContent.content || '',
+                    type: doc.type,
+                    tags: doc.tags || [],
+                    metadata: {
+                        status: 'draft',
+                        version: '1.0'
+                    }
+                },
+                sprintId
+            );
+
+            if (result?.success) {
+                console.log('✅ Document duplicated');
+                actions.ui.showNotification?.({
+                    id: 'duplicate-success',
+                    type: 'success',
+                    message: 'Document duplicated successfully',
+                    duration: 3000
+                });
+                loadDocuments(); // Refresh list
+            } else {
+                console.error('❌ Duplicate failed:', result?.error);
             }
         } catch (err) {
-            console.error('Error duplicating document:', err);
-        }
-    };
-
-    const handleExport = async (doc) => {
-        try {
-            const response = await fetch('/api/docs/export', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    docId: doc.docId,
-                    format: 'pdf'
-                })
-            });
-
-            if (response.ok) {
-                const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `${doc.title}.pdf`;
-                a.click();
-                window.URL.revokeObjectURL(url);
-            }
-        } catch (err) {
-            console.error('Error exporting document:', err);
+            console.error('💥 Duplicate exception:', err);
         }
     };
 
@@ -176,7 +351,9 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
         try {
             const response = await fetch('/api/documents/share', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 body: JSON.stringify({
                     documentId: doc.id,
                     suiteId,
@@ -199,15 +376,21 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
             }
         } catch (err) {
             console.error('Error sharing document:', err);
+            actions.ui.showNotification?.({
+                id: 'share-error',
+                type: 'error',
+                message: `Failed to share: ${err.message}`,
+                duration: 5000
+            });
         }
     };
-
     const handleBulkDelete = async () => {
         if (!confirm(`Move ${selectedDocs.length} documents to trash?`)) return;
 
         try {
             const result = await actions.archive.bulkDelete(suiteId, 'documents', selectedDocs, sprintId);
-            if (result.success) {
+            if (result?.success) {
+                console.log('✅ Bulk delete completed');
                 setSelectedDocs([]);
                 loadDocuments();
             }
@@ -224,51 +407,58 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
         );
     };
 
-    const filteredDocuments = documents.filter(doc => {
-        const matchesSearch =
-            doc.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            doc.content?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            doc.tags?.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()));
-        const matchesType = filterType === 'all' || doc.type === filterType;
-        return matchesSearch && matchesType;
-    });
-
-    const documentTypes = [...new Set(documents.map(d => d.type).filter(Boolean))];
-
-    if (showEditor) {
+    // Render edit mode
+    if (viewMode === 'edit') {
         return (
             <DocumentEditor
                 suiteId={suiteId}
                 sprintId={sprintId}
                 existingDocument={selectedDocument}
                 onSaveSuccess={handleSaveSuccess}
-                onCancel={() => {
-                    setShowEditor(false);
-                    setSelectedDocument(null);
-                    
-                    // Clear the create parameter from URL if present
-                    if (shouldAutoCreate && window.history.replaceState) {
-                        const url = new URL(window.location.href);
-                        url.searchParams.delete('create');
-                        window.history.replaceState({}, '', url);
-                    }
-                }}
+                onCancel={handleBackToList}
             />
         );
-    };
+    }
 
+    // Render preview mode using external component
+    if (viewMode === 'preview' && selectedDocument) {
+        if (loadingContent) {
+            return (
+                <div className="h-full flex items-center justify-center bg-background">
+                    <div className="text-center">
+                        <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
+                        <p className="text-sm text-muted-foreground">Loading document content...</p>
+                    </div>
+                </div>
+            );
+        }
+
+        return (
+            <DocumentPreview
+                document={selectedDocument}
+                onEdit={handleEdit}
+                onClose={handleBackToList}
+                onDelete={handleDelete}
+                onDuplicate={handleDuplicate}
+                onShare={handleShare}
+            />
+        );
+    }
+
+    // No suite selected
     if (!suiteId) {
         return (
             <div className="h-full flex items-center justify-center bg-background p-4">
                 <div className="text-center">
-                    <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground mx-auto mb-4" />
-                    <h3 className="text-base sm:text-lg font-medium text-foreground mb-2">No Suite Selected</h3>
+                    <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-foreground mb-2">No Suite Selected</h3>
                     <p className="text-sm text-muted-foreground">Please select a test suite to manage documents</p>
                 </div>
             </div>
         );
     }
 
+    // Render list view
     return (
         <div className="h-full flex flex-col bg-background">
             {/* Header */}
@@ -277,22 +467,32 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                     <div className="flex-1 min-w-0">
                         <h1 className="text-xl sm:text-2xl font-bold text-foreground truncate">Documents</h1>
                         <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                            Create and manage test documentation
+                            {loading ? 'Loading...' : `${totalFiltered} document${totalFiltered !== 1 ? 's' : ''}`}
                         </p>
                     </div>
-                    <button
-                        onClick={handleCreateNew}
-                        className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/80 transition-colors whitespace-nowrap"
-                    >
-                        <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-                        <span className="hidden sm:inline">New Document</span>
-                        <span className="sm:hidden">New</span>
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={handleRefresh}
+                            disabled={loading}
+                            className="flex items-center justify-center gap-2 px-3 py-2 border border-border rounded hover:bg-secondary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Refresh documents"
+                        >
+                            <RefreshCw className={`w-4 h-4 sm:w-5 sm:h-5 ${loading ? 'animate-spin' : ''}`} />
+                            <span className="hidden sm:inline text-sm">Refresh</span>
+                        </button>
+                        <button
+                            onClick={handleCreateNew}
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors whitespace-nowrap"
+                        >
+                            <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+                            <span className="hidden sm:inline">New Document</span>
+                            <span className="sm:hidden">New</span>
+                        </button>
+                    </div>
                 </div>
 
-                {/* Search and Filters Row */}
+                {/* Search and Filters */}
                 <div className="flex flex-col gap-2">
-                    {/* Mobile: Search Bar - Full Width Row 1 */}
                     <div className="relative sm:hidden">
                         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                         <input
@@ -300,13 +500,11 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Search documents..."
-                            className="w-full pl-9 pr-4 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                            className="w-full pl-9 pr-4 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background"
                         />
                     </div>
 
-                    {/* Mobile: Row 2 - Filters Button & View Toggle | Desktop: All in one row */}
                     <div className="flex items-center gap-2 sm:gap-3">
-                        {/* Desktop: Search Bar */}
                         <div className="relative hidden sm:block sm:max-w-md">
                             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                             <input
@@ -314,11 +512,10 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 placeholder="Search documents..."
-                                className="w-full pl-10 pr-4 py-2 text-base border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                                className="w-full pl-10 pr-4 py-2 text-base border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-background"
                             />
                         </div>
 
-                        {/* Toggle Filters Button (Mobile Only) */}
                         <button
                             onClick={() => setShowFilters(!showFilters)}
                             className="sm:hidden flex items-center justify-center gap-2 px-4 py-2 border border-border rounded-lg text-sm"
@@ -327,7 +524,6 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                             {showFilters ? <X className="w-4 h-4" /> : <SortAsc className="w-4 h-4" />}
                         </button>
 
-                        {/* Filters (Desktop always visible, Mobile collapsible dropdown) */}
                         <div className={`${showFilters ? 'flex' : 'hidden'} sm:flex flex-col sm:flex-row gap-2 sm:gap-3 ${showFilters ? 'absolute left-0 right-0 bg-card border-t border-b border-border p-4 z-10 mt-10' : ''}`}>
                             <select
                                 value={filterType}
@@ -347,8 +543,8 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                                 onChange={(e) => setSortBy(e.target.value)}
                                 className="px-3 py-2 text-sm border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary bg-card"
                             >
-                                <option value="created_at">Created Date</option>
                                 <option value="updated_at">Modified Date</option>
+                                <option value="created_at">Created Date</option>
                                 <option value="title">Title</option>
                                 <option value="type">Type</option>
                             </select>
@@ -362,18 +558,17 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                             </button>
                         </div>
 
-                        {/* View Toggle - Always on the right */}
                         <div className="flex border border-border rounded-lg ml-auto">
                             <button
-                                onClick={() => setViewMode('grid')}
-                                className={`p-2 ${viewMode === 'grid' ? 'bg-secondary' : 'hover:bg-secondary'}`}
+                                onClick={() => setDisplayMode('grid')}
+                                className={`p-2 ${displayMode === 'grid' ? 'bg-secondary' : 'hover:bg-secondary'}`}
                                 title="Grid View"
                             >
                                 <Grid className="w-4 h-4 sm:w-5 sm:h-5" />
                             </button>
                             <button
-                                onClick={() => setViewMode('list')}
-                                className={`p-2 ${viewMode === 'list' ? 'bg-secondary' : 'hover:bg-secondary'}`}
+                                onClick={() => setDisplayMode('list')}
+                                className={`p-2 ${displayMode === 'list' ? 'bg-secondary' : 'hover:bg-secondary'}`}
                                 title="List View"
                             >
                                 <ListIcon className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -382,10 +577,9 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                     </div>
                 </div>
 
-                {/* Bulk Actions Bar */}
                 {selectedDocs.length > 0 && (
-                    <div className="mt-3 sm:mt-4 p-3 bg-teal-50 border border-teal-300 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                        <span className="text-sm text-teal-800">
+                    <div className="mt-3 sm:mt-4 p-3 bg-teal-50 dark:bg-teal-900/30 border border-teal-300 dark:border-teal-700 rounded-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <span className="text-sm text-teal-800 dark:text-teal-200">
                             {selectedDocs.length} document{selectedDocs.length > 1 ? 's' : ''} selected
                         </span>
                         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
@@ -412,19 +606,25 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                 {loading ? (
                     <div className="flex items-center justify-center h-full">
                         <div className="text-center">
-                            <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-primary animate-spin mx-auto mb-4" />
+                            <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto mb-4" />
                             <p className="text-sm text-muted-foreground">Loading documents...</p>
                         </div>
                     </div>
                 ) : error ? (
                     <div className="bg-destructive/10 border border-destructive rounded-lg p-4 text-destructive text-sm">
                         {error}
+                        <button
+                            onClick={handleRefresh}
+                            className="ml-4 underline hover:no-underline"
+                        >
+                            Try again
+                        </button>
                     </div>
-                ) : filteredDocuments.length === 0 ? (
+                ) : paginatedDocuments.length === 0 ? (
                     <div className="flex items-center justify-center h-full">
                         <div className="text-center px-4">
-                            <FileText className="w-12 h-12 sm:w-16 sm:h-16 text-muted-foreground mx-auto mb-4" />
-                            <h3 className="text-base sm:text-lg font-medium text-foreground mb-2">
+                            <FileText className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
+                            <h3 className="text-lg font-medium text-foreground mb-2">
                                 No documents found
                             </h3>
                             <p className="text-sm text-muted-foreground mb-6">
@@ -435,101 +635,126 @@ export default function DocumentsDashboard({ suiteId: propSuiteId, sprintId: pro
                             {!searchQuery && filterType === 'all' && (
                                 <button
                                     onClick={handleCreateNew}
-                                    className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/80 transition-colors"
+                                    className="px-4 py-2 bg-primary text-primary-foreground rounded hover:bg-primary/90 transition-colors"
                                 >
                                     Create Document
                                 </button>
                             )}
                         </div>
                     </div>
-                ) : viewMode === 'grid' ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-                        {filteredDocuments.map(doc => (
-                            <DocumentCard
-                                key={doc.id}
-                                document={doc}
-                                isSelected={selectedDocs.includes(doc.id)}
-                                onSelect={() => toggleDocSelection(doc.id)}
-                                onEdit={handleEdit}
-                                onDelete={handleDelete}
-                                onDuplicate={handleDuplicate}
-                                onExport={handleExport}
-                                onShare={handleShare}
-                            />
-                        ))}
-                    </div>
                 ) : (
-                    <div className="bg-card rounded-lg shadow-theme-sm overflow-hidden">
-                        {/* Desktop Table */}
-                        <div className="hidden md:block overflow-x-auto">
-                            <table className="w-full">
-                                <thead className="bg-secondary border-b border-border">
-                                    <tr>
-                                        <th className="w-12 px-4 lg:px-6 py-3">
-                                            <input
-                                                type="checkbox"
-                                                checked={selectedDocs.length === filteredDocuments.length && filteredDocuments.length > 0}
-                                                onChange={(e) => {
-                                                    if (e.target.checked) {
-                                                        setSelectedDocs(filteredDocuments.map(d => d.id));
-                                                    } else {
-                                                        setSelectedDocs([]);
-                                                    }
-                                                }}
-                                                className="rounded border-border"
-                                            />
-                                        </th>
-                                        <th className="text-left px-4 lg:px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Title</th>
-                                        <th className="text-left px-4 lg:px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Type</th>
-                                        <th className="text-left px-4 lg:px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Tags</th>
-                                        <th className="text-left px-4 lg:px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Modified</th>
-                                        <th className="text-right px-4 lg:px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-border">
-                                    {filteredDocuments.map(doc => (
-                                        <DocumentRow
+                    <>
+                        {displayMode === 'grid' ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+                                {paginatedDocuments.map(doc => (
+                                    <DocumentCard
+                                        key={doc.id}
+                                        document={doc}
+                                        isSelected={selectedDocs.includes(doc.id)}
+                                        onSelect={() => toggleDocSelection(doc.id)}
+                                        onView={handleView}
+                                        onEdit={handleEdit}
+                                        onDelete={handleDelete}
+                                        onDuplicate={handleDuplicate}
+                                        onShare={handleShare}
+                                    />
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="bg-card rounded-lg shadow-theme-sm overflow-hidden">
+                                <div className="hidden md:block overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead className="bg-secondary border-b border-border">
+                                            <tr>
+                                                <th className="w-12 px-6 py-3">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selectedDocs.length === paginatedDocuments.length && paginatedDocuments.length > 0}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setSelectedDocs(paginatedDocuments.map(d => d.id));
+                                                            } else {
+                                                                setSelectedDocs([]);
+                                                            }
+                                                        }}
+                                                        className="rounded border-border"
+                                                    />
+                                                </th>
+                                                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Title</th>
+                                                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Type</th>
+                                                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Tags</th>
+                                                <th className="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Modified</th>
+                                                <th className="text-right px-6 py-3 text-xs font-medium text-muted-foreground uppercase">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-border">
+                                            {paginatedDocuments.map(doc => (
+                                                <DocumentRow
+                                                    key={doc.id}
+                                                    document={doc}
+                                                    isSelected={selectedDocs.includes(doc.id)}
+                                                    onSelect={() => toggleDocSelection(doc.id)}
+                                                    onView={handleView}
+                                                    onEdit={handleEdit}
+                                                    onDelete={handleDelete}
+                                                    onDuplicate={handleDuplicate}
+                                                    onShare={handleShare}
+                                                />
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div className="md:hidden divide-y divide-border">
+                                    {paginatedDocuments.map(doc => (
+                                        <DocumentCard
                                             key={doc.id}
                                             document={doc}
                                             isSelected={selectedDocs.includes(doc.id)}
                                             onSelect={() => toggleDocSelection(doc.id)}
+                                            onView={handleView}
                                             onEdit={handleEdit}
                                             onDelete={handleDelete}
                                             onDuplicate={handleDuplicate}
-                                            onExport={handleExport}
                                             onShare={handleShare}
+                                            compact
                                         />
                                     ))}
-                                </tbody>
-                            </table>
-                        </div>
+                                </div>
+                            </div>
+                        )}
 
-                        {/* Mobile List */}
-                        <div className="md:hidden divide-y divide-border">
-                            {filteredDocuments.map(doc => (
-                                <DocumentCard
-                                    key={doc.id}
-                                    document={doc}
-                                    isSelected={selectedDocs.includes(doc.id)}
-                                    onSelect={() => toggleDocSelection(doc.id)}
-                                    onEdit={handleEdit}
-                                    onDelete={handleDelete}
-                                    onDuplicate={handleDuplicate}
-                                    onExport={handleExport}
-                                    onShare={handleShare}
-                                    compact
-                                />
-                            ))}
-                        </div>
-                    </div>
+                        {/* Pagination */}
+                        {totalPages > 1 && (
+                            <div className="flex items-center justify-center gap-2 mt-6">
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                    disabled={currentPage === 1}
+                                    className="p-2 border border-border rounded hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <span className="text-sm text-muted-foreground">
+                                    Page {currentPage} of {totalPages}
+                                </span>
+                                <button
+                                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                    disabled={currentPage === totalPages}
+                                    className="p-2 border border-border rounded hover:bg-secondary disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <ChevronRight className="w-5 h-5" />
+                                </button>
+                            </div>
+                        )}
+                    </>
                 )}
             </div>
         </div>
     );
 }
 
-// Document Card Component for Grid View
-function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onDuplicate, onExport, onShare, compact = false }) {
+// Document Card Component
+function DocumentCard({ document, isSelected, onSelect, onView, onEdit, onDelete, onDuplicate, onShare, compact = false }) {
     const [showMenu, setShowMenu] = useState(false);
 
     const formatDate = (timestamp) => {
@@ -546,20 +771,23 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onDupl
 
     if (compact) {
         return (
-            <div className={`bg-card p-4 ${isSelected ? 'bg-primary/5' : ''}`}>
+            <div className={`bg-card p-4 ${isSelected ? 'bg-primary/5' : ''} hover:bg-secondary/50 transition-colors cursor-pointer`}>
                 <div className="flex items-start gap-3">
                     <input
                         type="checkbox"
                         checked={isSelected}
-                        onChange={onSelect}
+                        onChange={(e) => {
+                            e.stopPropagation();
+                            onSelect();
+                        }}
                         className="mt-1 rounded border-border flex-shrink-0"
                     />
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0" onClick={() => onView(document)}>
                         <div className="flex items-start justify-between gap-2 mb-2">
                             <h3 className="font-semibold text-foreground line-clamp-2 text-sm flex-1">
                                 {document.title}
                             </h3>
-                            <div className="relative flex-shrink-0">
+                            <div className="relative flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                                 <button
                                     onClick={() => setShowMenu(!showMenu)}
                                     className="p-1 hover:bg-secondary rounded"
@@ -568,11 +796,17 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onDupl
                                 </button>
                                 {showMenu && (
                                     <>
-                                        <div 
-                                            className="fixed inset-0 z-10" 
+                                        <div
+                                            className="fixed inset-0 z-10"
                                             onClick={() => setShowMenu(false)}
                                         />
                                         <div className="absolute right-0 mt-2 w-48 bg-card rounded-lg shadow-theme-lg border border-border py-1 z-20">
+                                            <button
+                                                onClick={() => { onView(document); setShowMenu(false); }}
+                                                className="w-full px-4 py-2 text-left text-sm hover:bg-secondary flex items-center gap-2 text-foreground"
+                                            >
+                                                <Eye className="w-4 h-4" /> View
+                                            </button>
                                             <button
                                                 onClick={() => { onEdit(document); setShowMenu(false); }}
                                                 className="w-full px-4 py-2 text-left text-sm hover:bg-secondary flex items-center gap-2 text-foreground"
@@ -591,12 +825,6 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onDupl
                                             >
                                                 <Share2 className="w-4 h-4" /> Share
                                             </button>
-                                            <button
-                                                onClick={() => { onExport(document); setShowMenu(false); }}
-                                                className="w-full px-4 py-2 text-left text-sm hover:bg-secondary flex items-center gap-2 text-foreground"
-                                            >
-                                                <Download className="w-4 h-4" /> Export
-                                            </button>
                                             <div className="border-t border-border my-1" />
                                             <button
                                                 onClick={() => { onDelete(document.id); setShowMenu(false); }}
@@ -613,14 +841,14 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onDupl
                             <span className="px-2 py-1 bg-secondary text-secondary-foreground rounded-full capitalize">
                                 {document.type?.replace('-', ' ')}
                             </span>
-                            <span>{formatDate(document.updated_at || document.created_at)}</span>
+                            <span>{formatDate(document.metadata?.lastModified || document.updated_at || document.created_at)}</span>
                         </div>
                         {document.tags && document.tags.length > 0 && (
                             <div className="flex flex-wrap gap-1">
                                 {document.tags.slice(0, 2).map((tag, index) => (
                                     <span
                                         key={index}
-                                        className="px-2 py-0.5 bg-teal-50 text-teal-800 text-xs rounded-full"
+                                        className="px-2 py-0.5 bg-teal-50 dark:bg-teal-900/30 text-teal-800 dark:text-teal-200 text-xs rounded-full"
                                     >
                                         {tag}
                                     </span>
@@ -639,18 +867,25 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onDupl
     }
 
     return (
-        <div className={`bg-card rounded-lg border ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-border'} hover:shadow-theme-md transition-shadow`}>
+        <div
+            className={`bg-card rounded-lg border ${isSelected ? 'border-primary ring-2 ring-primary/20' : 'border-border'} hover:shadow-theme-md transition-all cursor-pointer`}
+            onClick={() => onView(document)}
+        >
             <div className="p-4 sm:p-6">
                 <div className="flex items-start justify-between mb-4">
                     <div className="flex items-start gap-2 sm:gap-3 flex-1 min-w-0">
                         <input
                             type="checkbox"
                             checked={isSelected}
-                            onChange={onSelect}
+                            onChange={(e) => {
+                                e.stopPropagation();
+                                onSelect();
+                            }}
+                            onClick={(e) => e.stopPropagation()}
                             className="mt-1 rounded border-border flex-shrink-0"
                         />
-                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-teal-50 rounded-lg flex items-center justify-center flex-shrink-0">
-                            <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-teal-600" />
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-teal-50 dark:bg-teal-900/30 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-teal-600 dark:text-teal-400" />
                         </div>
                         <div className="flex-1 min-w-0">
                             <h3 className="font-semibold text-sm sm:text-base text-foreground line-clamp-2 mb-1">
@@ -661,7 +896,7 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onDupl
                             </span>
                         </div>
                     </div>
-                    <div className="relative flex-shrink-0">
+                    <div className="relative flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                         <button
                             onClick={() => setShowMenu(!showMenu)}
                             className="p-1 hover:bg-secondary rounded"
@@ -670,11 +905,17 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onDupl
                         </button>
                         {showMenu && (
                             <>
-                                <div 
-                                    className="fixed inset-0 z-10" 
+                                <div
+                                    className="fixed inset-0 z-10"
                                     onClick={() => setShowMenu(false)}
                                 />
                                 <div className="absolute right-0 mt-2 w-48 bg-card rounded-lg shadow-theme-lg border border-border py-1 z-20">
+                                    <button
+                                        onClick={() => { onView(document); setShowMenu(false); }}
+                                        className="w-full px-4 py-2 text-left text-sm hover:bg-secondary flex items-center gap-2 text-foreground"
+                                    >
+                                        <Eye className="w-4 h-4" /> View
+                                    </button>
                                     <button
                                         onClick={() => { onEdit(document); setShowMenu(false); }}
                                         className="w-full px-4 py-2 text-left text-sm hover:bg-secondary flex items-center gap-2 text-foreground"
@@ -693,12 +934,6 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onDupl
                                     >
                                         <Share2 className="w-4 h-4" /> Share
                                     </button>
-                                    <button
-                                        onClick={() => { onExport(document); setShowMenu(false); }}
-                                        className="w-full px-4 py-2 text-left text-sm hover:bg-secondary flex items-center gap-2 text-foreground"
-                                    >
-                                        <Download className="w-4 h-4" /> Export
-                                    </button>
                                     <div className="border-t border-border my-1" />
                                     <button
                                         onClick={() => { onDelete(document.id); setShowMenu(false); }}
@@ -715,22 +950,36 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onDupl
                 <div className="space-y-2 mb-4">
                     <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
                         <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
-                        <span className="text-xs">Modified: {formatDate(document.updated_at || document.created_at)}</span>
+                        <span className="text-xs">Modified: {formatDate(document.metadata?.lastModified || document.updated_at || document.created_at)}</span>
                     </div>
-                    {document.created_by && (
+                    {document.metadata?.modifiedBy && (
                         <div className="flex items-center gap-2 text-xs sm:text-sm text-muted-foreground">
                             <User className="w-3 h-3 sm:w-4 sm:h-4" />
-                            <span className="text-xs">Creator</span>
+                            <span className="text-xs">{document.metadata.modifiedBy}</span>
+                        </div>
+                    )}
+                    {document.googleDoc?.url && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <FileText className="w-3 h-3" />
+                            <a
+                                href={document.googleDoc.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-primary hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                View in Google Docs
+                            </a>
                         </div>
                     )}
                 </div>
 
                 {document.tags && document.tags.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-4">
+                    <div className="flex flex-wrap gap-1.5 sm:gap-2">
                         {document.tags.slice(0, 3).map((tag, index) => (
                             <span
                                 key={index}
-                                className="px-2 py-1 bg-secondary text-secondary-foreground text-xs rounded-full flex items-center gap-1"
+                                className="px-2 py-1 bg-teal-50 dark:bg-teal-900/30 text-teal-800 dark:text-teal-200 text-xs rounded-full flex items-center gap-1"
                             >
                                 <Tag className="w-3 h-3" />
                                 {tag}
@@ -743,25 +992,13 @@ function DocumentCard({ document, isSelected, onSelect, onEdit, onDelete, onDupl
                         )}
                     </div>
                 )}
-
-                {document.url && (
-                    <a
-                        href={document.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center justify-center gap-2 w-full px-3 py-2 text-xs sm:text-sm text-primary hover:bg-teal-50 rounded-lg transition-colors"
-                    >
-                        <ExternalLink className="w-3 h-3 sm:w-4 sm:h-4" />
-                        Open in Google Docs
-                    </a>
-                )}
             </div>
         </div>
     );
 }
 
-// Document Row Component for List View (Desktop)
-function DocumentRow({ document, isSelected, onSelect, onEdit, onDelete, onDuplicate, onExport, onShare }) {
+// Document Row Component for List View
+function DocumentRow({ document, isSelected, onSelect, onView, onEdit, onDelete, onDuplicate, onShare }) {
     const [showMenu, setShowMenu] = useState(false);
 
     const formatDate = (timestamp) => {
@@ -775,8 +1012,8 @@ function DocumentRow({ document, isSelected, onSelect, onEdit, onDelete, onDupli
     };
 
     return (
-        <tr className="hover:bg-secondary">
-            <td className="px-4 lg:px-6 py-4">
+        <tr className="hover:bg-secondary cursor-pointer" onClick={() => onView(document)}>
+            <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                 <input
                     type="checkbox"
                     checked={isSelected}
@@ -784,21 +1021,34 @@ function DocumentRow({ document, isSelected, onSelect, onEdit, onDelete, onDupli
                     className="rounded border-border"
                 />
             </td>
-            <td className="px-4 lg:px-6 py-4">
+            <td className="px-6 py-4">
                 <div className="flex items-center gap-3">
                     <FileText className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                    <span className="font-medium text-foreground truncate">{document.title}</span>
+                    <div className="flex-1 min-w-0">
+                        <span className="font-medium text-foreground truncate block">{document.title}</span>
+                        {document.googleDoc?.url && (
+                            <a
+                                href={document.googleDoc.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs text-primary hover:underline"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                View in Google Docs
+                            </a>
+                        )}
+                    </div>
                 </div>
             </td>
-            <td className="px-4 lg:px-6 py-4">
+            <td className="px-6 py-4">
                 <span className="px-2 py-1 bg-secondary text-secondary-foreground text-xs rounded-full capitalize whitespace-nowrap">
                     {document.type?.replace('-', ' ')}
                 </span>
             </td>
-            <td className="px-4 lg:px-6 py-4">
+            <td className="px-6 py-4">
                 <div className="flex flex-wrap gap-1">
                     {document.tags?.slice(0, 2).map((tag, idx) => (
-                        <span key={idx} className="px-2 py-1 bg-teal-50 text-teal-800 text-xs rounded-full">
+                        <span key={idx} className="px-2 py-1 bg-teal-50 dark:bg-teal-900/30 text-teal-800 dark:text-teal-200 text-xs rounded-full">
                             {tag}
                         </span>
                     ))}
@@ -809,22 +1059,18 @@ function DocumentRow({ document, isSelected, onSelect, onEdit, onDelete, onDupli
                     )}
                 </div>
             </td>
-            <td className="px-4 lg:px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">
-                {formatDate(document.updated_at || document.created_at)}
+            <td className="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap">
+                {formatDate(document.metadata?.lastModified || document.updated_at || document.created_at)}
             </td>
-            <td className="px-4 lg:px-6 py-4">
+            <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-end gap-2">
-                    {document.url && (
-                        <a
-                            href={document.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-2 text-primary hover:bg-teal-50 rounded"
-                            title="Open in Google Docs"
-                        >
-                            <ExternalLink className="w-4 h-4" />
-                        </a>
-                    )}
+                    <button
+                        onClick={() => onView(document)}
+                        className="p-2 text-primary hover:bg-teal-50 dark:hover:bg-teal-900/30 rounded"
+                        title="View"
+                    >
+                        <Eye className="w-4 h-4" />
+                    </button>
                     <button
                         onClick={() => onEdit(document)}
                         className="p-2 text-muted-foreground hover:bg-secondary rounded"
@@ -841,8 +1087,8 @@ function DocumentRow({ document, isSelected, onSelect, onEdit, onDelete, onDupli
                         </button>
                         {showMenu && (
                             <>
-                                <div 
-                                    className="fixed inset-0 z-10" 
+                                <div
+                                    className="fixed inset-0 z-10"
                                     onClick={() => setShowMenu(false)}
                                 />
                                 <div className="absolute right-0 mt-2 w-48 bg-card rounded-lg shadow-theme-lg border border-border py-1 z-20">
@@ -857,12 +1103,6 @@ function DocumentRow({ document, isSelected, onSelect, onEdit, onDelete, onDupli
                                         className="w-full px-4 py-2 text-left text-sm hover:bg-secondary flex items-center gap-2 text-foreground"
                                     >
                                         <Share2 className="w-4 h-4" /> Share
-                                    </button>
-                                    <button
-                                        onClick={() => { onExport(document); setShowMenu(false); }}
-                                        className="w-full px-4 py-2 text-left text-sm hover:bg-secondary flex items-center gap-2 text-foreground"
-                                    >
-                                        <Download className="w-4 h-4" /> Export
                                     </button>
                                     <div className="border-t border-border my-1" />
                                     <button

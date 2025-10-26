@@ -127,9 +127,9 @@ export default function ChatDrawer({
   if (!isOpen) return null;
 
   return (
-    <div className="h-screen w-full bg-card border-l border-border shadow-theme-lg flex flex-col">
+    <div className="h-full flex flex-col bg-card animate-slide-in-right overflow-hidden">
       {/* Fixed Header */}
-      <div className="flex-shrink-0 text-foreground p-3 bg-card border-b border-border">
+      <div className="flex-shrink-0 text-foreground p-3 bg-card border-b border-border z-10">
         <div className="flex items-center justify-between mb-2">
           <h3 className="font-semibold text-base">Team Chat</h3>
           <div className="flex items-center gap-1">
@@ -172,7 +172,7 @@ export default function ChatDrawer({
       </div>
 
       {activeTab === 'chat' ? (
-        <>
+        <div className="flex-1 flex flex-col overflow-hidden">
           {/* Scrollable Messages Area */}
           <div className="flex-1 overflow-y-auto p-3 bg-card">
             {isLoading ? (
@@ -312,7 +312,7 @@ export default function ChatDrawer({
               </p>
             )}
           </div>
-        </>
+        </div>
       ) : (
         /* Details Tab - Scrollable */
         <div className="flex-1 overflow-y-auto p-3 space-y-4">
@@ -447,6 +447,24 @@ export default function ChatDrawer({
           </div>
         </div>
       )}
+
+      {/* Animation Styles */}
+      <style jsx>{`
+        @keyframes slide-in-right {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
+        }
+
+        .animate-slide-in-right {
+          animation: slide-in-right 0.3s ease-out;
+        }
+      `}</style>
     </div>
   );
 }

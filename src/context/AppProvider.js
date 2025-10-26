@@ -3,7 +3,6 @@
 
 import { createContext, useContext, useEffect, useState, useRef, useMemo } from 'react';
 import { useSlices, getAppState } from './hooks/useSlices';
-import { useAI } from './hooks/useAI';
 import { useTestCases } from './hooks/useTestCases';
 import { useTheme } from './hooks/useTheme';
 import { useAssetLinking } from './hooks/useAssetLinking';
@@ -26,14 +25,6 @@ export const AppProvider = ({ children }) => {
 
     // Check if recommendations slice is available
     const hasRecommendationsSlice = slices.recommendations !== undefined;
-
-    const { initializeAI, generateTestCasesWithAI, getAIAnalytics, updateAISettings } = useAI(
-        slices.auth,
-        slices.ai,
-        slices.ui,
-        aiInitialized,
-        setAiInitialized
-    );
 
     const { wrappedCreateTestCase, wrappedUpdateTestCase } = useTestCases(slices);
     const { setTheme, toggleTheme } = useTheme(slices.theme, slices.ui);
@@ -606,7 +597,6 @@ export const AppProvider = ({ children }) => {
                 console.log('✅ Profile refreshed, proceeding with app initialization');
                 slices.suites.actions.loadSuitesStart();
                 setSuitesLoaded(false);
-                initializeAI();
 
                 if (unsubscribeSuitesRef.current && typeof unsubscribeSuitesRef.current === 'function') {
                     unsubscribeSuitesRef.current();
@@ -1392,7 +1382,6 @@ export const AppProvider = ({ children }) => {
                 team: slices.team.actions,
                 automation: slices.automation.actions,
                 ui: slices.ui.actions,
-                ai: { ...slices.ai.actions, generateTestCasesWithAI, getAIAnalytics, updateAISettings },
                 theme: { ...slices.theme.actions, setTheme, toggleTheme },
 
                 organization: {
@@ -1431,94 +1420,72 @@ export const AppProvider = ({ children }) => {
                     resetFilters
                 },
 
-                // NEW: Documents actions
+                // Then update your createDocument method to use this helper:
                 documents: {
                     ...slices.documents?.actions,
 
-                    // FIXED: Wrapper to ensure correct parameter order
                     createDocument: async (suiteId, documentData, sprintId = null) => {
-                        console.log('📄 AppProvider.documents.createDocument called:', {
-                            suiteId,
-                            documentDataKeys: typeof documentData === 'object' ? Object.keys(documentData) : typeof documentData,
-                            sprintId,
-                            activeSuiteId: slices.suites.state.activeSuite?.id
+                        console.log('📄 Creating document:', {
+                            suiteId: suiteId || slices.suites.state.activeSuite?.id,
+                            title: documentData?.title
                         });
 
-                        // Validate suiteId
-                        let finalSuiteId = suiteId;
+                        const finalSuiteId = suiteId || slices.suites.state.activeSuite?.id;
 
-                        // Fallback to active suite if not provided
-                        if (!finalSuiteId && slices.suites.state.activeSuite?.id) {
-                            finalSuiteId = slices.suites.state.activeSuite.id;
-                            console.log('📌 Using active suite ID:', finalSuiteId);
-                        }
-
-                        if (!finalSuiteId || typeof finalSuiteId !== 'string') {
-                            console.error('❌ Invalid suite ID for document creation:', finalSuiteId);
-                            slices.ui.actions.showNotification?.({
-                                id: 'doc-create-no-suite',
-                                type: 'error',
-                                message: 'Cannot create document: Suite ID is missing or invalid',
-                                duration: 5000,
-                            });
+                        if (!finalSuiteId || !documentData?.title) {
                             return {
                                 success: false,
-                                error: { message: 'Suite ID is required but not provided or invalid' }
+                                error: { message: 'Suite ID and title are required' }
                             };
                         }
-
-                        // Validate documentData
-                        if (!documentData || typeof documentData !== 'object') {
-                            console.error('❌ Invalid document data:', documentData);
-                            return {
-                                success: false,
-                                error: { message: 'Invalid document data provided' }
-                            };
-                        }
-
-                        console.log('✅ Calling FirestoreService.createDocument with:', {
-                            suiteId: finalSuiteId,
-                            title: documentData.title,
-                            type: documentData.type,
-                            sprintId
-                        });
 
                         try {
-                            const result = await FirestoreService.createDocument(
-                                finalSuiteId,
-                                documentData,
-                                sprintId
-                            );
+                            const { content: dataContent, ...metadataOnly } = documentData;
+                            const suiteName = slices.suites.state.activeSuite?.name ||
+                                slices.suites.state.testSuites?.find(s => s.id === finalSuiteId)?.name;
 
-                            console.log('📊 FirestoreService.createDocument result:', {
-                                success: result.success,
-                                hasData: !!result.data,
-                                error: result.error
+                            // ✅ NO AUTH CHECKS - Just make the API call
+                            const response = await fetch('/api/documents/create', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                    // ❌ NO Authorization header
+                                },
+                                body: JSON.stringify({
+                                    suiteId: finalSuiteId,
+                                    sprintId,
+                                    documentData: metadataOnly,
+                                    content: dataContent || '',
+                                    suiteName
+                                })
                             });
+
+                            if (!response.ok) {
+                                const errorData = await response.json();
+                                throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+                            }
+
+                            const result = await response.json();
 
                             if (result.success) {
                                 slices.ui.actions.showNotification?.({
                                     id: 'doc-create-success',
                                     type: 'success',
-                                    message: `Document "${documentData.title || 'Untitled'}" created successfully`,
+                                    message: `Document "${documentData.title}" created`,
                                     duration: 3000,
                                 });
                             } else {
-                                slices.ui.actions.showNotification?.({
-                                    id: 'doc-create-failed',
-                                    type: 'error',
-                                    message: result.error?.message || 'Failed to create document',
-                                    duration: 5000,
-                                });
+                                throw new Error(result.error?.message || 'Failed to create document');
                             }
 
                             return result;
+
                         } catch (error) {
-                            console.error('💥 Exception in createDocument:', error);
+                            console.error('Create document error:', error);
                             slices.ui.actions.showNotification?.({
-                                id: 'doc-create-exception',
+                                id: 'doc-create-error',
                                 type: 'error',
-                                message: `Create failed: ${error.message}`,
+                                message: `Failed: ${error.message}`,
                                 duration: 5000,
                             });
                             return {
@@ -1528,80 +1495,45 @@ export const AppProvider = ({ children }) => {
                         }
                     },
 
-                    // FIXED: Wrapper for updateDocument
                     updateDocument: async (documentId, updates, suiteId = null, sprintId = null) => {
-                        console.log('📝 AppProvider.documents.updateDocument called:', {
-                            documentId,
-                            updatesKeys: typeof updates === 'object' ? Object.keys(updates) : typeof updates,
-                            suiteId,
-                            sprintId,
-                            activeSuiteId: slices.suites.state.activeSuite?.id
-                        });
-
-                        // Determine final suiteId
-                        let finalSuiteId = suiteId;
-
-                        // Fallback to active suite
-                        if (!finalSuiteId && slices.suites.state.activeSuite?.id) {
-                            finalSuiteId = slices.suites.state.activeSuite.id;
-                            console.log('📌 Using active suite ID:', finalSuiteId);
-                        }
+                        const finalSuiteId = suiteId || slices.suites.state.activeSuite?.id;
 
                         if (!finalSuiteId) {
-                            console.error('❌ No suite ID available for document update');
-                            slices.ui.actions.showNotification?.({
-                                id: 'doc-update-no-suite',
-                                type: 'error',
-                                message: 'Cannot update document: Suite ID is missing',
-                                duration: 5000,
-                            });
-                            return {
-                                success: false,
-                                error: { message: 'Suite ID is required but not provided' }
-                            };
+                            return { success: false, error: { message: 'Suite ID required' } };
                         }
 
-                        console.log('✅ Calling FirestoreService.updateDocument with:', {
-                            documentId,
-                            finalSuiteId,
-                            sprintId
-                        });
-
                         try {
-                            const result = await FirestoreService.updateDocument(
-                                documentId,
-                                updates,
-                                finalSuiteId,
-                                sprintId
-                            );
+                            const { content: updatesContent, ...metadataUpdates } = updates;
 
-                            console.log('📊 FirestoreService.updateDocument result:', result);
+                            // NO AUTH HEADER NEEDED
+                            const response = await fetch('/api/documents/update', {
+                                method: 'PUT',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                    documentId,
+                                    suiteId: finalSuiteId,
+                                    sprintId,
+                                    updates: metadataUpdates,
+                                    content: updatesContent
+                                })
+                            });
+
+                            const result = await response.json();
 
                             if (result.success) {
                                 slices.ui.actions.showNotification?.({
                                     id: 'doc-update-success',
                                     type: 'success',
-                                    message: 'Document updated successfully',
+                                    message: 'Document updated',
                                     duration: 3000,
-                                });
-                            } else {
-                                slices.ui.actions.showNotification?.({
-                                    id: 'doc-update-failed',
-                                    type: 'error',
-                                    message: result.error?.message || 'Failed to update document',
-                                    duration: 5000,
                                 });
                             }
 
                             return result;
+
                         } catch (error) {
-                            console.error('💥 Exception in updateDocument:', error);
-                            slices.ui.actions.showNotification?.({
-                                id: 'doc-update-exception',
-                                type: 'error',
-                                message: `Update failed: ${error.message}`,
-                                duration: 5000,
-                            });
                             return {
                                 success: false,
                                 error: { message: error.message }
@@ -1609,13 +1541,111 @@ export const AppProvider = ({ children }) => {
                         }
                     },
 
-                    getDocument: FirestoreService.getDocument.bind(FirestoreService),
-                    getDocuments: FirestoreService.getDocuments.bind(FirestoreService),
+                    // Keep all your other document methods as they are...
+                    getDocument: async (documentId, suiteId, sprintId = null) => {
+                        try {
+                            const finalSuiteId = suiteId || slices.suites.state.activeSuite?.id;
+                            if (!finalSuiteId) {
+                                return { success: false, error: { message: 'Suite ID required' } };
+                            }
+                            return await FirestoreService.getDocument(documentId, finalSuiteId, sprintId);
+                        } catch (error) {
+                            return { success: false, error: { message: error.message } };
+                        }
+                    },
+
+                    fetchDocumentContent: async (documentId, suiteId, sprintId = null) => {
+                        try {
+                            const finalSuiteId = suiteId || slices.suites.state.activeSuite?.id;
+                            if (!finalSuiteId) {
+                                return { success: false, error: { message: 'Suite ID required' } };
+                            }
+
+                            const docResult = await FirestoreService.getDocument(documentId, finalSuiteId, sprintId);
+                            if (!docResult.success || !docResult.data.googleDoc?.docId) {
+                                return docResult;
+                            }
+
+                            // Get token for API request
+                            const idToken = await getFirebaseIdToken();
+
+                            const response = await fetch(`/api/docs/${docResult.data.googleDoc.docId}`, {
+                                headers: { 'Authorization': `Bearer ${idToken}` }
+                            });
+
+                            if (!response.ok) {
+                                throw new Error('Failed to fetch document content');
+                            }
+
+                            const googleDocData = await response.json();
+                            return {
+                                success: true,
+                                data: { ...docResult.data, content: googleDocData.content }
+                            };
+                        } catch (error) {
+                            console.error('Fetch content error:', error);
+                            return { success: false, error: { message: error.message } };
+                        }
+                    },
+
+                    getDocuments: async (suiteId, sprintId = null, options = {}) => {
+                        try {
+                            const finalSuiteId = suiteId || slices.suites.state.activeSuite?.id;
+                            if (!finalSuiteId) {
+                                return { success: false, error: { message: 'Suite ID required' } };
+                            }
+
+                            return await FirestoreService.getDocuments(finalSuiteId, sprintId, options);
+                        } catch (error) {
+                            console.error('Error getting documents:', error);
+                            return { success: false, error: { message: error.message } };
+                        }
+                    },
+
                     deleteDocument: enhancedDeleteDocument,
                     archiveDocument: enhancedArchiveDocument,
-                    searchDocuments: FirestoreService.searchDocuments.bind(FirestoreService),
-                    getDocumentStatistics: FirestoreService.getDocumentStatistics.bind(FirestoreService),
-                    getDocumentVersionHistory: FirestoreService.getDocumentVersionHistory.bind(FirestoreService),
+
+                    searchDocuments: async (suiteId, searchQuery, sprintId = null) => {
+                        try {
+                            const finalSuiteId = suiteId || slices.suites.state.activeSuite?.id;
+                            if (!finalSuiteId) {
+                                return { success: false, error: { message: 'Suite ID required' } };
+                            }
+
+                            return await FirestoreService.searchDocuments(finalSuiteId, searchQuery, sprintId);
+                        } catch (error) {
+                            console.error('Error searching documents:', error);
+                            return { success: false, error: { message: error.message } };
+                        }
+                    },
+
+                    getDocumentStatistics: async (suiteId, sprintId = null) => {
+                        try {
+                            const finalSuiteId = suiteId || slices.suites.state.activeSuite?.id;
+                            if (!finalSuiteId) {
+                                return { success: false, error: { message: 'Suite ID required' } };
+                            }
+
+                            return await FirestoreService.getDocumentStatistics(finalSuiteId, sprintId);
+                        } catch (error) {
+                            console.error('Error getting document statistics:', error);
+                            return { success: false, error: { message: error.message } };
+                        }
+                    },
+
+                    getDocumentVersionHistory: async (documentId, suiteId, sprintId = null) => {
+                        try {
+                            const finalSuiteId = suiteId || slices.suites.state.activeSuite?.id;
+                            if (!finalSuiteId) {
+                                return { success: false, error: { message: 'Suite ID required' } };
+                            }
+
+                            return await FirestoreService.getDocumentVersionHistory(documentId, finalSuiteId, sprintId);
+                        } catch (error) {
+                            console.error('Error getting document version history:', error);
+                            return { success: false, error: { message: error.message } };
+                        }
+                    },
                 },
 
                 // NEW: TestData actions
@@ -1936,8 +1966,6 @@ export const AppProvider = ({ children }) => {
             suiteCreationBlocked: slices.suites.state.suiteCreationBlocked,
             isTrialActive: slices.subscription.state.isTrialActive,
             planLimits: slices.subscription.state.planLimits,
-            aiAvailable: slices.ai.state.isInitialized && !slices.ai.state.error,
-            aiGenerating: slices.ai.state.isGenerating,
             isDarkMode: slices.theme.state.isDark,
             isLightMode: slices.theme.state.isLight,
             isSystemTheme: slices.theme.state.isSystem,
@@ -1970,7 +1998,6 @@ export const AppProvider = ({ children }) => {
                 slices.team.state.loading ||
                 slices.automation.state.loading ||
                 slices.ui.state.loading ||
-                slices.ai.state.loading ||
                 slices.theme.state.isLoading ||
                 archiveLoading ||
                 (hasRecommendationsSlice ? slices.recommendations.state.loading : false) ||
@@ -1983,9 +2010,6 @@ export const AppProvider = ({ children }) => {
             wrappedUpdateTestCase,
             saveRecording,
             linkRecordingToBug,
-            generateTestCasesWithAI,
-            getAIAnalytics,
-            updateAISettings,
             setTheme,
             toggleTheme,
             linkTestCasesToBug,

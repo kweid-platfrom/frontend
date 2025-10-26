@@ -15,24 +15,28 @@ import {
   Copy,
   Check
 } from 'lucide-react';
-import { useAI } from '../context/AIContext';
+import { useLexicalComposerContext } from '@lexical/react/LexicalComposerContext';
+import { $getRoot } from 'lexical';
+import { $generateNodesFromDOM } from '@lexical/html';
+import { useAI } from '@/context/AIContext';
 
 export default function AIAssistantDrawer({ 
   isOpen, 
-  onClose, 
-  documentContent = '',
+  onClose,
   documentTitle = 'Untitled Document',
   documentType = 'document',
   onInsertContent,
   onReplaceContent
 }) {
+  const [editor] = useLexicalComposerContext();
+  
   const {
     checkGrammar,
-    generateDocumentation,
-    isLoading: aiLoading,
-    error: aiError,
+    generatePlainTextContent,
+    isCheckingGrammar,
     isInitialized,
     isHealthy,
+    error: aiError,
     clearError
   } = useAI();
 
@@ -53,9 +57,9 @@ What would you like me to help with?`,
     }
   ]);
   const [inputValue, setInputValue] = useState('');
-  const [isProcessing, setIsProcessing] = useState(false);
   const [showQuickActions, setShowQuickActions] = useState(true);
   const [copiedIndex, setCopiedIndex] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -85,61 +89,158 @@ What would you like me to help with?`,
     }
   }, [aiError, clearError]);
 
+  // Get plain text content from editor
+  const getEditorContent = () => {
+    let content = '';
+    editor.getEditorState().read(() => {
+      const root = $getRoot();
+      content = root.getTextContent();
+    });
+    return content;
+  };
+
+  // Insert HTML content into editor at cursor position
+  const insertIntoEditor = (htmlContent) => {
+    editor.update(() => {
+      const parser = new DOMParser();
+      const htmlDoc = htmlContent.includes('<html') 
+        ? htmlContent 
+        : `<!DOCTYPE html><html><body>${htmlContent}</body></html>`;
+      
+      const dom = parser.parseFromString(htmlDoc, 'text/html');
+      const nodes = $generateNodesFromDOM(editor, dom);
+      
+      const selection = editor._editorState._selection;
+      
+      if (selection) {
+        const anchor = selection.anchor;
+        const focus = selection.focus;
+        
+        if (anchor && focus) {
+          const anchorNode = anchor.getNode();
+          nodes.forEach(node => {
+            if (node) {
+              anchorNode.getParentOrThrow().insertAfter(node);
+            }
+          });
+        }
+      } else {
+        const root = $getRoot();
+        nodes.forEach(node => {
+          if (node) {
+            root.append(node);
+          }
+        });
+      }
+    });
+
+    if (onInsertContent) {
+      onInsertContent(htmlContent);
+    }
+  };
+
+  // Replace entire editor content
+  const replaceEditorContent = (htmlContent) => {
+    editor.update(() => {
+      const root = $getRoot();
+      root.clear();
+
+      const parser = new DOMParser();
+      const htmlDoc = htmlContent.includes('<html') 
+        ? htmlContent 
+        : `<!DOCTYPE html><html><body>${htmlContent}</body></html>`;
+      
+      const dom = parser.parseFromString(htmlDoc, 'text/html');
+      const nodes = $generateNodesFromDOM(editor, dom);
+
+      if (nodes && nodes.length > 0) {
+        nodes.forEach(node => {
+          if (node) {
+            root.append(node);
+          }
+        });
+      }
+    });
+
+    if (onReplaceContent) {
+      onReplaceContent(htmlContent);
+    }
+  };
+
   const quickActions = [
     {
       icon: FileText,
       label: 'Summarize',
-      prompt: `Please create a concise summary of this document:\n\nTitle: ${documentTitle}\n\nContent:\n${documentContent.slice(0, 2000)}`,
-      needsContent: true
+      description: 'Create a concise summary',
+      prompt: `Please create a concise summary of this document`,
+      needsContent: true,
+      action: 'summarize',
+      showActions: false
     },
     {
       icon: Lightbulb,
       label: 'Explain',
-      prompt: `Please explain the key concepts in this document in simple terms:\n\nTitle: ${documentTitle}\n\nContent:\n${documentContent.slice(0, 2000)}`,
-      needsContent: true
+      description: 'Simplify complex concepts',
+      prompt: `Please explain the key concepts in simple terms`,
+      needsContent: true,
+      action: 'explain',
+      showActions: false
     },
     {
       icon: Edit3,
       label: 'Improve',
-      prompt: `Please review this document and suggest improvements for clarity and professionalism:\n\nTitle: ${documentTitle}\n\nContent:\n${documentContent.slice(0, 2000)}`,
-      needsContent: true
+      description: 'Enhance writing quality',
+      prompt: `Please review and suggest improvements for clarity and professionalism`,
+      needsContent: true,
+      action: 'improve',
+      showActions: true
     },
     {
       icon: List,
       label: 'Bullet Points',
-      prompt: `Convert the main points of this document into a bulleted list:\n\nTitle: ${documentTitle}\n\nContent:\n${documentContent.slice(0, 2000)}`,
-      needsContent: true
+      description: 'Convert to structured list',
+      prompt: `Convert the main points into a bulleted list`,
+      needsContent: true,
+      action: 'bullets',
+      showActions: true
     },
     {
       icon: CheckCircle2,
       label: 'Grammar',
-      prompt: 'grammar_check',
+      description: 'Check for errors',
+      prompt: 'Check grammar and spelling',
       needsContent: true,
-      isSpecial: true
+      action: 'grammar',
+      showActions: true
     },
     {
       icon: Wand2,
       label: 'Generate',
-      prompt: `Create a new ${documentType} document with appropriate structure and content based on the title: ${documentTitle}`,
-      needsContent: false
+      description: 'Create new content',
+      prompt: `Create a new ${documentType} document with appropriate structure`,
+      needsContent: false,
+      action: 'generate',
+      showActions: true
     }
   ];
 
   const handleQuickAction = async (action) => {
-    if (action.needsContent && !documentContent.trim()) {
+    const currentContent = getEditorContent();
+    
+    if (action.needsContent && !currentContent.trim()) {
       addMessage('assistant', 'Please add some content to your document first before using this action.', true);
       return;
     }
 
-    if (action.isSpecial && action.prompt === 'grammar_check') {
-      await handleGrammarCheck();
+    if (action.action === 'grammar') {
+      await handleGrammarCheck(currentContent, action.showActions);
     } else {
-      await handleSendMessage(action.prompt);
+      await handleGenerateContent(action.prompt, action.action, currentContent, action.showActions);
     }
   };
 
-  const handleGrammarCheck = async () => {
-    if (!documentContent.trim()) {
+  const handleGrammarCheck = async (content, showActions = true) => {
+    if (!content || !content.trim()) {
       addMessage('assistant', 'Please add some content to check for grammar.', true);
       return;
     }
@@ -148,32 +249,41 @@ What would you like me to help with?`,
     setIsProcessing(true);
 
     try {
-      const result = await checkGrammar(documentContent, {
+      const result = await checkGrammar(content, {
         includeStyleSuggestions: true,
         checkSpelling: true
       });
 
       if (result.success && result.data) {
-        const { suggestions = [], correctedText, summary } = result.data;
+        const { issues = [], correctedText, summary, overallScore } = result.data;
         
         let responseContent = '';
         
-        if (suggestions.length === 0) {
+        if (issues.length === 0) {
           responseContent = '✅ Great! No grammar or spelling issues found.';
         } else {
-          responseContent = `Found ${suggestions.length} suggestion${suggestions.length > 1 ? 's' : ''}:\n\n`;
+          responseContent = `📝 Grammar Check Results${overallScore ? ` (Score: ${overallScore}/100)` : ''}\n\n`;
+          responseContent += `Found ${issues.length} issue${issues.length > 1 ? 's' : ''}:\n\n`;
           
-          suggestions.slice(0, 10).forEach((suggestion, idx) => {
-            responseContent += `${idx + 1}. **${suggestion.type}**: "${suggestion.original}" → "${suggestion.suggestion}"\n`;
+          issues.slice(0, 10).forEach((issue, idx) => {
+            responseContent += `${idx + 1}. **${issue.type}** (${issue.severity}): "${issue.original}" → "${issue.suggestion}"\n   ${issue.explanation}\n\n`;
           });
 
-          if (suggestions.length > 10) {
-            responseContent += `\n...and ${suggestions.length - 10} more suggestions.`;
+          if (issues.length > 10) {
+            responseContent += `\n...and ${issues.length - 10} more issues.`;
+          }
+
+          if (summary) {
+            responseContent += `\n\n📊 Summary:\n`;
+            responseContent += `- Total Issues: ${summary.totalIssues}\n`;
+            responseContent += `- Errors: ${summary.errors}\n`;
+            responseContent += `- Warnings: ${summary.warnings}\n`;
+            responseContent += `- Suggestions: ${summary.suggestions}`;
           }
         }
 
         addMessage('assistant', responseContent, false, {
-          hasActions: correctedText && suggestions.length > 0,
+          hasActions: showActions && correctedText && issues.length > 0,
           generatedContent: correctedText
         });
       } else {
@@ -187,53 +297,115 @@ What would you like me to help with?`,
     }
   };
 
+  const handleGenerateContent = async (userPrompt, actionType, currentContent, showActions = true) => {
+    addMessage('user', userPrompt);
+    setIsProcessing(true);
+
+    try {
+      const prompt = buildDocumentPrompt(userPrompt, actionType, currentContent);
+      
+      const result = await generatePlainTextContent(prompt, {
+        temperature: actionType === 'summarize' ? 0.3 : actionType === 'explain' ? 0.4 : 0.7,
+        maxTokens: 2000
+      });
+
+      if (result.success && result.data) {
+        const content = result.data.trim();
+        
+        addMessage('assistant', content, false, {
+          hasActions: showActions,
+          generatedContent: content
+        });
+      } else {
+        throw new Error(result.error || 'Failed to generate content');
+      }
+    } catch (error) {
+      console.error('Generate content error:', error);
+      addMessage('assistant', `Failed to generate content: ${error.message}`, true);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const buildDocumentPrompt = (userPrompt, actionType, currentContent) => {
+    const baseContext = `You are a professional writing assistant helping with a document.
+Document Title: ${documentTitle}
+Document Type: ${documentType}
+
+`;
+
+    switch (actionType) {
+      case 'summarize':
+        return `${baseContext}Please provide a clear, concise summary of the following document content. Focus on the main points and key takeaways. Write in paragraph form, not bullets.
+
+Content to summarize:
+${currentContent}
+
+Provide a well-structured summary in 2-3 paragraphs.`;
+
+      case 'explain':
+        return `${baseContext}Please explain the key concepts and ideas in this document in simple, easy-to-understand terms. Break down complex topics into digestible explanations.
+
+Content to explain:
+${currentContent}
+
+Provide a clear, engaging explanation that anyone can understand.`;
+
+      case 'improve':
+        return `${baseContext}Please improve the following content for better clarity, professionalism, and readability. Maintain the original meaning but enhance the writing quality. Return ONLY the improved content, no explanations.
+
+Content to improve:
+${currentContent}
+
+Provide the improved version with better flow and structure.`;
+
+      case 'bullets':
+        return `${baseContext}Please convert the following content into a well-organized bulleted list, extracting the main points and key information. Use proper markdown bullet formatting.
+
+Content to convert:
+${currentContent}
+
+Provide a clear bulleted list with hierarchical structure if needed.`;
+
+      case 'generate':
+        return `${baseContext}${userPrompt}
+
+Please generate comprehensive, well-structured content for this document. Write in a professional, clear style with proper formatting.`;
+
+      default:
+        return `${baseContext}${userPrompt}
+
+${currentContent ? `Current document content:\n${currentContent}\n\n` : ''}
+
+Please provide a helpful, well-formatted response.`;
+    }
+  };
+
   const handleSendMessage = async (messageText = inputValue) => {
-    if (!messageText.trim() || isProcessing || aiLoading) return;
+    if (!messageText.trim()) return;
 
     if (!isInitialized || !isHealthy) {
       addMessage('assistant', 'AI service is not available. Please check your configuration.', true);
       return;
     }
 
-    addMessage('user', messageText);
     setInputValue('');
-    setIsProcessing(true);
 
-    try {
-      // Determine the type of request
-      const lowerMessage = messageText.toLowerCase();
-      
-      if (lowerMessage.includes('grammar') || lowerMessage.includes('spelling')) {
-        await handleGrammarCheck();
-        return;
-      }
-
-      // For documentation generation
-      const docType = lowerMessage.includes('test') ? 'test_plan' :
-                      lowerMessage.includes('report') ? 'report' :
-                      lowerMessage.includes('guide') ? 'guide' : 
-                      'general';
-
-      const result = await generateDocumentation(
-        `${messageText}\n\nDocument Context:\nTitle: ${documentTitle}\nType: ${documentType}\nContent: ${documentContent.slice(0, 1500)}`,
-        docType
-      );
-
-      if (result.success && result.data) {
-        const content = result.data.content || result.data.text || 'Content generated successfully.';
-        
-        addMessage('assistant', content, false, {
-          hasActions: true,
-          generatedContent: content
-        });
-      } else {
-        throw new Error(result.error || 'Failed to generate response');
-      }
-    } catch (error) {
-      console.error('AI Error:', error);
-      addMessage('assistant', `Sorry, I encountered an error: ${error.message}`, true);
-    } finally {
-      setIsProcessing(false);
+    const currentContent = getEditorContent();
+    const lowerMessage = messageText.toLowerCase();
+    
+    if (lowerMessage.includes('grammar') || lowerMessage.includes('spelling') || lowerMessage.includes('check')) {
+      await handleGrammarCheck(currentContent, true);
+    } else if (lowerMessage.includes('summarize') || lowerMessage.includes('summary')) {
+      await handleGenerateContent('Please create a concise summary', 'summarize', currentContent, false);
+    } else if (lowerMessage.includes('improve') || lowerMessage.includes('enhance')) {
+      await handleGenerateContent('Please improve the writing quality', 'improve', currentContent, true);
+    } else if (lowerMessage.includes('explain')) {
+      await handleGenerateContent('Please explain the key concepts', 'explain', currentContent, false);
+    } else if (lowerMessage.includes('bullet') || lowerMessage.includes('list')) {
+      await handleGenerateContent('Convert to bullet points', 'bullets', currentContent, true);
+    } else {
+      await handleGenerateContent(messageText, 'custom', currentContent, true);
     }
   };
 
@@ -248,26 +420,27 @@ What would you like me to help with?`,
   };
 
   const handleInsertContent = (content) => {
-    if (onInsertContent) {
-      onInsertContent(content);
-      addMessage('assistant', '✅ Content inserted into your document.');
-    }
+    insertIntoEditor(content);
+    addMessage('assistant', '✅ Content inserted into your document.');
   };
 
   const handleReplaceDocument = (content) => {
-    if (onReplaceContent) {
-      const confirmed = window.confirm(
-        'This will replace your entire document. Are you sure?'
-      );
-      if (confirmed) {
-        onReplaceContent(content);
-        addMessage('assistant', '✅ Document replaced successfully.');
-      }
+    const confirmed = window.confirm(
+      'This will replace your entire document. Are you sure?'
+    );
+    
+    if (confirmed) {
+      replaceEditorContent(content);
+      addMessage('assistant', '✅ Document replaced successfully.');
     }
   };
 
   const handleCopyContent = (content, index) => {
-    navigator.clipboard.writeText(content);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = content;
+    const textContent = tempDiv.textContent || tempDiv.innerText || content;
+    
+    navigator.clipboard.writeText(textContent);
     setCopiedIndex(index);
     setTimeout(() => setCopiedIndex(null), 2000);
   };
@@ -281,7 +454,7 @@ What would you like me to help with?`,
 
   if (!isOpen) return null;
 
-  const isLoading = isProcessing || aiLoading;
+  const isLoading = isCheckingGrammar || isProcessing;
 
   return (
     <div className="h-full flex flex-col bg-card animate-slide-in-right overflow-hidden">
@@ -307,7 +480,6 @@ What would you like me to help with?`,
           </button>
         </div>
 
-        {/* Quick Actions Toggle */}
         <button
           onClick={() => setShowQuickActions(!showQuickActions)}
           className="w-full flex items-center justify-between p-2 hover:bg-secondary/50 rounded transition-colors"
@@ -321,19 +493,21 @@ What would you like me to help with?`,
         </button>
       </div>
 
-      {/* Collapsible Quick Actions */}
       {showQuickActions && (
         <div className="flex-shrink-0 p-3 border-b border-border bg-secondary/30">
           <div className="grid grid-cols-3 gap-2">
             {quickActions.map((action, index) => {
               const Icon = action.icon;
+              const currentContent = getEditorContent();
+              const isDisabled = isLoading || (action.needsContent && !currentContent.trim());
+              
               return (
                 <button
                   key={index}
                   onClick={() => handleQuickAction(action)}
                   className="flex flex-col items-center gap-1 p-2 bg-background hover:bg-primary/10 rounded border border-border hover:border-primary transition-colors text-center disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={isLoading}
-                  title={action.needsContent && !documentContent.trim() ? 'Add content first' : ''}
+                  disabled={isDisabled}
+                  title={isDisabled && action.needsContent ? 'Add content first' : action.description}
                 >
                   <Icon className="w-4 h-4 text-primary" />
                   <span className="text-xs text-foreground">{action.label}</span>
@@ -344,7 +518,6 @@ What would you like me to help with?`,
         </div>
       )}
 
-      {/* Scrollable Messages Area */}
       <div className="flex-1 overflow-y-auto p-3 bg-card">
         <div className="space-y-3">
           {messages.map((message, index) => (
@@ -363,7 +536,6 @@ What would you like me to help with?`,
               >
                 <p className="text-sm whitespace-pre-wrap">{message.content}</p>
                 
-                {/* Action Buttons for AI Responses with Generated Content */}
                 {message.role === 'assistant' && message.hasActions && message.generatedContent && (
                   <div className="mt-3 pt-3 border-t border-border space-y-2">
                     <button
@@ -415,7 +587,6 @@ What would you like me to help with?`,
         </div>
       </div>
 
-      {/* Fixed Input Area at Bottom */}
       <div className="flex-shrink-0 p-3 bg-card border-t border-border">
         <div className="flex items-end gap-2">
           <div className="flex-1 relative">
@@ -450,7 +621,6 @@ What would you like me to help with?`,
         </p>
       </div>
 
-      {/* Animation Styles */}
       <style>{`
         @keyframes slide-in-right {
           from {

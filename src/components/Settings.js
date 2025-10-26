@@ -1,5 +1,5 @@
 'use client'
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '@/context/AppProvider';
 import ThemeToggle from '@/components/common/ThemeToggle';
 import {
@@ -8,11 +8,15 @@ import {
     ExclamationTriangleIcon,
     EyeIcon,
     EyeSlashIcon,
-    KeyIcon
+    KeyIcon,
+    SparklesIcon,
+    BoltIcon,
+    CpuChipIcon
 } from '@heroicons/react/24/outline';
 import PaletteIcon from '@mui/icons-material/Palette';
+import aiServiceInstance from '@/services/aiService';
 
-// Password Update Component
+// Password Update Component (unchanged)
 const PasswordSection = () => {
     const { actions } = useApp();
     const [isChanging, setIsChanging] = useState(false);
@@ -266,7 +270,7 @@ const PasswordSection = () => {
     );
 };
 
-// Theme Settings Component
+// Theme Settings Component (unchanged)
 const ThemeSection = () => {
     const { state: { theme } } = useApp();
 
@@ -309,24 +313,127 @@ const ThemeSection = () => {
     );
 };
 
-// AI Settings Component  
+// AI Settings Component - FIXED VERSION
 const AISettingsSection = () => {
-    const { state, actions, aiAvailable } = useApp();
+    const { actions } = useApp();
     const [showApiKey, setShowApiKey] = useState(false);
+    const [availableModels, setAvailableModels] = useState([]);
+    const [currentModelInfo, setCurrentModelInfo] = useState(null);
     const [settings, setSettings] = useState({
-        provider: state.ai.settings?.provider || 'openai',
         apiKey: '',
-        model: state.ai.settings?.model || 'gpt-3.5-turbo',
-        temperature: state.ai.settings?.temperature || 0.7,
+        model: 'gemini-1.5-flash',
+        temperature: 0.7,
     });
     const [saving, setSaving] = useState(false);
+    const [testing, setTesting] = useState(false);
+    const [connectionStatus, setConnectionStatus] = useState(null);
+
+    // Load current AI configuration
+    useEffect(() => {
+        const loadAIConfig = async () => {
+            try {
+                const models = aiServiceInstance.getAvailableModels();
+                const modelInfo = aiServiceInstance.getCurrentModelInfo();
+                
+                setAvailableModels(models);
+                setCurrentModelInfo(modelInfo);
+                setSettings(prev => ({
+                    ...prev,
+                    model: modelInfo.model,
+                    temperature: aiServiceInstance.temperature
+                }));
+
+                // Test connection on load
+                const health = await aiServiceInstance.testConnection();
+                setConnectionStatus(health);
+            } catch (error) {
+                console.error('Failed to load AI config:', error);
+            }
+        };
+
+        loadAIConfig();
+    }, []);
+
+    const getModelIcon = (modelId) => {
+        if (modelId.includes('flash')) return BoltIcon;
+        if (modelId.includes('pro')) return CpuChipIcon;
+        return SparklesIcon;
+    };
+
+    const handleModelChange = async (modelId) => {
+        setSettings(prev => ({ ...prev, model: modelId }));
+        
+        // Switch model in AI service
+        const result = aiServiceInstance.switchModel(modelId);
+        if (result.success) {
+            const updatedInfo = aiServiceInstance.getCurrentModelInfo();
+            setCurrentModelInfo(updatedInfo);
+            
+            actions.ui.showNotification?.({
+                id: 'model-switched',
+                type: 'success',
+                message: `Switched to ${result.modelInfo.displayName}`,
+                duration: 3000,
+            });
+        }
+    };
+
+    const handleTestConnection = async () => {
+        setTesting(true);
+        try {
+            const result = await aiServiceInstance.testConnection();
+            setConnectionStatus(result);
+            
+            actions.ui.showNotification?.({
+                id: 'ai-test',
+                type: result.success ? 'success' : 'error',
+                message: result.success ? 'AI connection successful!' : 'AI connection failed',
+                description: result.message,
+                duration: 4000,
+            });
+        } catch (error) {
+            actions.ui.showNotification?.({
+                id: 'ai-test-error',
+                type: 'error',
+                message: 'Connection test failed',
+                description: error.message,
+                duration: 4000,
+            });
+        } finally {
+            setTesting(false);
+        }
+    };
 
     const handleSave = async () => {
         setSaving(true);
         try {
-            await actions.ai.updateAISettings(settings);
+            // Update temperature
+            const result = aiServiceInstance.updateConfig({
+                model: settings.model,
+                temperature: settings.temperature
+            });
+
+            if (result.success) {
+                actions.ui.showNotification?.({
+                    id: 'ai-settings-saved',
+                    type: 'success',
+                    message: 'AI settings saved successfully',
+                    duration: 3000,
+                });
+
+                // Refresh current model info
+                const updatedInfo = aiServiceInstance.getCurrentModelInfo();
+                setCurrentModelInfo(updatedInfo);
+            }
         } catch (error) {
-            console.error('Failed to update AI settings:', error);
+            console.error('Failed to save AI settings:', error);
+            actions.ui.showNotification?.({
+                id: 'ai-settings-error',
+                type: 'error',
+                message: 'Failed to save settings',
+                description: error.message,
+                duration: 4000,
+            });
         } finally {
             setSaving(false);
         }
@@ -336,81 +443,141 @@ const AISettingsSection = () => {
         <div className="bg-card p-6 rounded-lg border border-border">
             <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center">
-                    <CogIcon className="h-5 w-5 text-primary mr-2" />
+                    <SparklesIcon className="h-5 w-5 text-primary mr-2" />
                     <h3 className="text-lg font-semibold text-card-foreground">AI Assistant Settings</h3>
                 </div>
-                <div className="flex items-center">
-                    {aiAvailable ? (
-                        <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                <div className="flex items-center space-x-2">
+                    {connectionStatus?.success ? (
+                        <>
+                            <CheckCircleIcon className="h-5 w-5 text-green-500" />
+                            <span className="text-sm text-green-600">Connected</span>
+                        </>
+                    ) : connectionStatus === null ? (
+                        <>
+                            <CogIcon className="h-5 w-5 text-gray-400 animate-spin" />
+                            <span className="text-sm text-muted-foreground">Checking...</span>
+                        </>
                     ) : (
-                        <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500" />
+                        <>
+                            <ExclamationTriangleIcon className="h-5 w-5 text-yellow-500" />
+                            <span className="text-sm text-yellow-600">Not Connected</span>
+                        </>
                     )}
-                    <span className="ml-2 text-sm text-muted-foreground">
-                        {aiAvailable ? 'Available' : 'Unavailable'}
-                    </span>
                 </div>
             </div>
 
-            <div className="space-y-4">
-                <div>
-                    <label className="block text-sm font-medium text-card-foreground mb-1">
-                        AI Provider
-                    </label>
-                    <select
-                        value={settings.provider}
-                        onChange={(e) => setSettings(prev => ({ ...prev, provider: e.target.value }))}
-                        className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                    >
-                        <option value="openai">OpenAI</option>
-                        <option value="anthropic">Anthropic</option>
-                        <option value="gemini">Google Gemini</option>
-                    </select>
-                </div>
-
-                <div>
-                    <label className="block text-sm font-medium text-card-foreground mb-1">
-                        API Key
-                    </label>
-                    <form onSubmit={(e) => e.preventDefault()}>
-                        <div className="relative">
-                            <input
-                                type={showApiKey ? 'text' : 'password'}
-                                value={settings.apiKey}
-                                onChange={(e) => setSettings(prev => ({ ...prev, apiKey: e.target.value }))}
-                                placeholder="Enter your API key"
-                                autoComplete="off"
-                                className="w-full px-3 py-2 pr-10 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowApiKey(!showApiKey)}
-                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                            >
-                                {showApiKey ? (
-                                    <EyeSlashIcon className="h-4 w-4" />
-                                ) : (
-                                    <EyeIcon className="h-4 w-4" />
-                                )}
-                            </button>
+            <div className="space-y-6">
+                {/* API Key Configuration */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex items-start">
+                        <KeyIcon className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 mr-2 flex-shrink-0" />
+                        <div className="flex-1">
+                            <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">
+                                API Key Configuration
+                            </p>
+                            <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
+                                Your Gemini API key is configured in environment variables. 
+                                Status: <strong>{currentModelInfo?.apiKeyConfigured ? 'Configured ✓' : 'Not Set ✗'}</strong>
+                            </p>
+                            {!currentModelInfo?.apiKeyConfigured && (
+                                <p className="text-xs text-blue-600 dark:text-blue-400">
+                                    Add NEXT_PUBLIC_GEMINI_API_KEY to your .env file and restart the server.
+                                </p>
+                            )}
                         </div>
-                    </form>
+                    </div>
                 </div>
 
+                {/* Model Selection */}
                 <div>
-                    <label className="block text-sm font-medium text-card-foreground mb-1">
-                        Model
+                    <label className="block text-sm font-medium text-card-foreground mb-3">
+                        Select Gemini Model
                     </label>
-                    <input
-                        type="text"
-                        value={settings.model}
-                        onChange={(e) => setSettings(prev => ({ ...prev, model: e.target.value }))}
-                        className="w-full px-3 py-2 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-                    />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {availableModels.map((model) => {
+                            const IconComponent = getModelIcon(model.id);
+                            const isActive = model.id === settings.model;
+                            
+                            return (
+                                <button
+                                    key={model.id}
+                                    onClick={() => handleModelChange(model.id)}
+                                    className={`relative p-4 rounded-lg border-2 text-left transition-all ${
+                                        isActive
+                                            ? 'border-primary bg-primary/5'
+                                            : 'border-border hover:border-primary/50 hover:bg-muted/50'
+                                    }`}
+                                >
+                                    <div className="flex items-start justify-between mb-2">
+                                        <div className="flex items-center">
+                                            <IconComponent className={`h-5 w-5 mr-2 ${isActive ? 'text-primary' : 'text-muted-foreground'}`} />
+                                            <div>
+                                                <p className="font-medium text-sm text-card-foreground">
+                                                    {model.name}
+                                                </p>
+                                                {model.recommended && (
+                                                    <span className="inline-block mt-1 px-2 py-0.5 text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded">
+                                                        Recommended
+                                                    </span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        {isActive && (
+                                            <CheckCircleIcon className="h-5 w-5 text-primary" />
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mb-2">
+                                        {model.description}
+                                    </p>
+                                    <div className="flex items-center justify-between text-xs">
+                                        <span className="text-muted-foreground">
+                                            Cost: <strong className="text-card-foreground">${model.costPer1kTokens}/1K tokens</strong>
+                                        </span>
+                                        <span className="text-muted-foreground">
+                                            Max: <strong className="text-card-foreground">{model.maxTokens}</strong>
+                                        </span>
+                                    </div>
+                                </button>
+                            );
+                        })}
+                    </div>
                 </div>
 
+                {/* Current Model Info */}
+                {currentModelInfo && (
+                    <div className="bg-muted/50 rounded-lg p-4">
+                        <p className="text-sm font-medium text-card-foreground mb-2">Active Model</p>
+                        <div className="grid grid-cols-2 gap-3 text-xs">
+                            <div>
+                                <span className="text-muted-foreground">Model:</span>
+                                <p className="font-medium text-card-foreground">{currentModelInfo.displayName}</p>
+                            </div>
+                            <div>
+                                <span className="text-muted-foreground">Status:</span>
+                                <p className={`font-medium ${currentModelInfo.isHealthy ? 'text-green-600' : 'text-yellow-600'}`}>
+                                    {currentModelInfo.isHealthy ? 'Healthy' : 'Unknown'}
+                                </p>
+                            </div>
+                            <div>
+                                <span className="text-muted-foreground">Last Check:</span>
+                                <p className="font-medium text-card-foreground">
+                                    {currentModelInfo.lastHealthCheck 
+                                        ? new Date(currentModelInfo.lastHealthCheck).toLocaleTimeString()
+                                        : 'Never'}
+                                </p>
+                            </div>
+                            <div>
+                                <span className="text-muted-foreground">Max Tokens:</span>
+                                <p className="font-medium text-card-foreground">{currentModelInfo.maxTokens}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Temperature Control */}
                 <div>
-                    <label className="block text-sm font-medium text-card-foreground mb-1">
-                        Temperature: {settings.temperature}
+                    <label className="block text-sm font-medium text-card-foreground mb-2">
+                        Creativity Level (Temperature): <strong>{settings.temperature}</strong>
                     </label>
                     <input
                         type="range"
@@ -419,21 +586,35 @@ const AISettingsSection = () => {
                         step="0.1"
                         value={settings.temperature}
                         onChange={(e) => setSettings(prev => ({ ...prev, temperature: parseFloat(e.target.value) }))}
-                        className="w-full"
+                        className="w-full h-2 bg-muted rounded-lg appearance-none cursor-pointer"
                     />
-                    <div className="flex justify-between text-xs text-muted-foreground">
-                        <span>Focused</span>
-                        <span>Creative</span>
+                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                        <span>0.0 - Focused & Deterministic</span>
+                        <span>1.0 - Creative & Varied</span>
                     </div>
+                    <p className="text-xs text-muted-foreground mt-2">
+                        {settings.temperature < 0.3 && "Very focused - Best for test cases requiring consistency"}
+                        {settings.temperature >= 0.3 && settings.temperature < 0.7 && "Balanced - Good for most QA tasks"}
+                        {settings.temperature >= 0.7 && "More creative - Better for brainstorming and exploration"}
+                    </p>
                 </div>
 
-                <div className="flex justify-end pt-4">
+                {/* Action Buttons */}
+                <div className="flex justify-between items-center pt-4 border-t border-border">
+                    <button
+                        onClick={handleTestConnection}
+                        disabled={testing || !currentModelInfo?.apiKeyConfigured}
+                        className="flex items-center px-4 py-2 text-sm border border-border rounded-md hover:bg-muted transition-colors disabled:opacity-50"
+                    >
+                        <CogIcon className={`h-4 w-4 mr-2 ${testing ? 'animate-spin' : ''}`} />
+                        {testing ? 'Testing...' : 'Test Connection'}
+                    </button>
                     <button
                         onClick={handleSave}
-                        disabled={saving}
+                        disabled={saving || !currentModelInfo?.apiKeyConfigured}
                         className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-teal-500 transition-colors disabled:opacity-50"
                     >
-                        {saving ? 'Saving...' : 'Save AI Settings'}
+                        {saving ? 'Saving...' : 'Save Settings'}
                     </button>
                 </div>
             </div>
@@ -441,14 +622,14 @@ const AISettingsSection = () => {
     );
 };
 
-// Main Settings Component that exports all sections
+// Main Settings Component
 const Settings = () => {
     return (
-        <>
+        <div className="space-y-6">
             <PasswordSection />
             <ThemeSection />
             <AISettingsSection />
-        </>
+        </div>
     );
 };
 

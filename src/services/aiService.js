@@ -1,68 +1,155 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-// services/aiService.js - Gemini-only AI Service
-import { FirestoreService } from '../services'
+// services/aiService.js - Complete Gemini AI Service with Model Switching
+import { FirestoreService } from '../services';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 class AIService {
     constructor() {
         this.firestoreService = new FirestoreService();
         
-        // Simplified configuration - Gemini only
-        this.config = {
-            model: process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5-flash',
-            apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY,
-            temperature: 0.7,
-            maxTokens: 3000
+        // Gemini model configurations
+        this.models = {
+            'gemini-2.0-flash-lite': {
+                name: 'Gemini 2.0 Flash',
+                displayName: 'Flash (Fast & Cost-Effective)',
+                costPer1kTokens: 0.00015,
+                maxTokens: 8192,
+                description: 'Best for quick responses and high-volume tasks',
+                recommended: true
+            },
+            'gemini-1.5-pro': {
+                name: 'Gemini 1.5 Pro',
+                displayName: 'Pro (Advanced Reasoning)',
+                costPer1kTokens: 0.00125,
+                maxTokens: 8192,
+                description: 'Best for complex analysis and detailed insights'
+            },
+            'gemini-pro': {
+                name: 'Gemini Pro',
+                displayName: 'Pro (Standard)',
+                costPer1kTokens: 0.0005,
+                maxTokens: 4096,
+                description: 'Balanced performance for general tasks'
+            },
+            'gemini-pro-vision': {
+                name: 'Gemini Pro Vision',
+                displayName: 'Pro Vision (Image Support)',
+                costPer1kTokens: 0.00025,
+                maxTokens: 4096,
+                description: 'For analyzing screenshots and visual content'
+            }
         };
 
+        // Current configuration
+        this.currentModel = process.env.NEXT_PUBLIC_GEMINI_MODEL || 'gemini-1.5-flash-latest';
+        this.apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+        this.temperature = 0.7;
         this.maxRetries = 3;
         this.retryDelay = 1000;
+        
+        // Health status
         this.isHealthy = false;
         this.lastHealthCheck = null;
-
-        // Initialize Gemini client
-        if (this.config.apiKey) {
-            try {
-                this.genAI = new GoogleGenerativeAI(this.config.apiKey);
-                console.log('✅ Gemini AI client initialized');
-            } catch (error) {
-                console.error('❌ Failed to initialize Gemini client:', error);
-            }
+        this.initializationError = null;
+        
+        // Gemini client
+        this.genAI = null;
+        
+        // Initialize if API key is available
+        if (this.apiKey) {
+            this.initializeClient();
         } else {
-            console.warn('⚠️ Gemini API key not found. Please set NEXT_PUBLIC_GEMINI_API_KEY');
+            console.warn('⚠️ Gemini API key not found. Set NEXT_PUBLIC_GEMINI_API_KEY');
+            this.initializationError = 'API key not configured';
         }
     }
 
-    // Test connection to Gemini - REQUIRED METHOD
+    // Initialize Gemini client
+    initializeClient() {
+        try {
+            this.genAI = new GoogleGenerativeAI(this.apiKey);
+            console.log(`✅ Gemini client initialized with model: ${this.currentModel}`);
+            return true;
+        } catch (error) {
+            console.error('❌ Failed to initialize Gemini client:', error);
+            this.initializationError = error.message;
+            return false;
+        }
+    }
+
+    // Switch between Gemini models
+    switchModel(modelName) {
+        if (!this.models[modelName]) {
+            console.error(`❌ Invalid model: ${modelName}`);
+            return {
+                success: false,
+                error: `Model ${modelName} not found. Available models: ${Object.keys(this.models).join(', ')}`
+            };
+        }
+
+        const previousModel = this.currentModel;
+        this.currentModel = modelName;
+        
+        console.log(`🔄 Switched from ${previousModel} to ${modelName}`);
+        
+        return {
+            success: true,
+            previousModel,
+            currentModel: this.currentModel,
+            modelInfo: this.models[modelName]
+        };
+    }
+
+    // Get available models
+    getAvailableModels() {
+        return Object.entries(this.models).map(([key, value]) => ({
+            id: key,
+            ...value,
+            isActive: key === this.currentModel
+        }));
+    }
+
+    // Get current model info
+    getCurrentModelInfo() {
+        return {
+            model: this.currentModel,
+            ...this.models[this.currentModel],
+            apiKeyConfigured: !!this.apiKey,
+            isHealthy: this.isHealthy,
+            lastHealthCheck: this.lastHealthCheck
+        };
+    }
+
+    // Test connection to Gemini
     async testConnection() {
-        console.log('🔍 Testing Gemini AI connection...');
+        console.log(`🔍 Testing Gemini connection with ${this.currentModel}...`);
 
         try {
-            if (!this.config.apiKey) {
-                throw new Error('Gemini API key not configured. Please set NEXT_PUBLIC_GEMINI_API_KEY environment variable.');
+            if (!this.apiKey) {
+                throw new Error('Gemini API key not configured. Set NEXT_PUBLIC_GEMINI_API_KEY environment variable.');
             }
 
             if (!this.genAI) {
-                this.genAI = new GoogleGenerativeAI(this.config.apiKey);
+                this.initializeClient();
             }
 
-            const testPrompt = "Hello! Please respond with 'Connection successful' if you can read this.";
+            const testPrompt = "Respond with exactly: 'Connection successful'";
             const result = await this.callAI(testPrompt, {
                 type: 'connection_test',
                 temperature: 0.1,
-                maxTokens: 50,
+                maxTokens: 20,
                 logPrompt: false
             });
 
             if (result.success) {
                 this.isHealthy = true;
                 this.lastHealthCheck = new Date().toISOString();
+                this.initializationError = null;
 
                 console.log('✅ Gemini connection successful');
                 return {
                     success: true,
                     provider: 'gemini',
-                    model: this.config.model,
+                    model: this.currentModel,
                     responseTime: result.responseTime,
                     healthy: true,
                     message: 'Gemini AI connection test successful'
@@ -73,6 +160,7 @@ class AIService {
         } catch (error) {
             this.isHealthy = false;
             this.lastHealthCheck = new Date().toISOString();
+            this.initializationError = error.message;
 
             console.error('❌ Gemini connection failed:', error.message);
 
@@ -92,38 +180,44 @@ class AIService {
             isHealthy: this.isHealthy,
             lastHealthCheck: this.lastHealthCheck,
             provider: 'gemini',
-            model: this.config.model
+            model: this.currentModel,
+            modelInfo: this.models[this.currentModel],
+            error: this.initializationError
         };
     }
 
-    // Get current provider configuration
-    getCurrentProvider() {
+    // Get service status (alias for compatibility)
+    getServiceStatus() {
         return {
+            initialized: this.isHealthy,
+            healthy: this.isHealthy,
             provider: 'gemini',
-            model: this.config.model,
-            config: this.config
+            model: this.currentModel,
+            lastHealthCheck: this.lastHealthCheck,
+            error: this.initializationError
         };
     }
 
     // Core AI API call with retry logic
     async callAI(prompt, options = {}) {
-        if (!this.config.apiKey) {
+        if (!this.apiKey) {
             throw new Error('Gemini API key not configured');
         }
 
         if (!this.genAI) {
-            this.genAI = new GoogleGenerativeAI(this.config.apiKey);
+            this.initializeClient();
         }
 
         const startTime = Date.now();
+        const modelToUse = options.model || this.currentModel;
 
         for (let attempt = 1; attempt <= this.maxRetries; attempt++) {
             try {
                 const model = this.genAI.getGenerativeModel({
-                    model: this.config.model,
+                    model: modelToUse,
                     generationConfig: {
-                        temperature: options.temperature || this.config.temperature,
-                        maxOutputTokens: options.maxTokens || this.config.maxTokens,
+                        temperature: options.temperature ?? this.temperature,
+                        maxOutputTokens: options.maxTokens || this.models[modelToUse]?.maxTokens || 4096,
                     }
                 });
 
@@ -136,18 +230,19 @@ class AIService {
                 const text = response.text();
 
                 const responseTime = Date.now() - startTime;
+                const estimatedTokens = this.estimateTokens(promptText + text);
 
-                // Log successful AI usage (only if not a connection test)
+                // Log successful AI usage (except for connection tests)
                 if (options.type !== 'connection_test') {
                     await this.logAIUsage({
                         provider: 'gemini',
+                        model: modelToUse,
                         type: options.type || 'general',
-                        tokensUsed: 0, // Gemini doesn't provide token count in response
-                        cost: 0,
+                        tokensUsed: estimatedTokens,
+                        cost: this.calculateCost(estimatedTokens, modelToUse),
                         successful: true,
                         responseTime,
-                        model: this.config.model,
-                        prompt: options.logPrompt ? prompt : '[REDACTED]',
+                        prompt: options.logPrompt ? promptText : '[REDACTED]',
                         timestamp: new Date().toISOString()
                     });
                 }
@@ -155,10 +250,13 @@ class AIService {
                 return {
                     success: true,
                     data: text,
-                    usage: { total_tokens: 0 }, // Gemini doesn't provide token usage
+                    usage: { 
+                        total_tokens: estimatedTokens,
+                        estimated: true 
+                    },
                     responseTime,
                     provider: 'gemini',
-                    model: this.config.model
+                    model: modelToUse
                 };
             } catch (error) {
                 console.error(`AI API attempt ${attempt} failed:`, error);
@@ -168,12 +266,12 @@ class AIService {
                     if (options.type !== 'connection_test') {
                         await this.logAIUsage({
                             provider: 'gemini',
+                            model: modelToUse,
                             type: options.type || 'general',
                             tokensUsed: 0,
                             cost: 0,
                             successful: false,
                             responseTime: Date.now() - startTime,
-                            model: this.config.model,
                             error: error.message,
                             timestamp: new Date().toISOString()
                         });
@@ -182,7 +280,8 @@ class AIService {
                     return {
                         success: false,
                         error: `Failed after ${this.maxRetries} attempts: ${error.message}`,
-                        provider: 'gemini'
+                        provider: 'gemini',
+                        model: modelToUse
                     };
                 }
 
@@ -195,10 +294,14 @@ class AIService {
     async generateTestCases(prompt, templateConfig = {}) {
         const systemPrompt = this.buildTestCasePrompt(prompt, templateConfig);
 
+        // Use appropriate model based on complexity
+        const modelToUse = templateConfig.useAdvancedModel ? 'gemini-1.5-pro' : this.currentModel;
+
         const result = await this.callAI(systemPrompt, {
             type: 'test_generation',
             temperature: 0.6,
-            maxTokens: 3000
+            maxTokens: 4000,
+            model: modelToUse
         });
 
         if (result.success) {
@@ -212,6 +315,7 @@ class AIService {
                     templateConfig,
                     result: parsedData,
                     tokensUsed: result.usage?.total_tokens || 0,
+                    cost: this.calculateCost(result.usage?.total_tokens || 0, modelToUse),
                     responseTime: result.responseTime,
                     provider: result.provider,
                     model: result.model,
@@ -223,7 +327,9 @@ class AIService {
                     data: parsedData,
                     generationId: docResult.success ? docResult.docId : null,
                     provider: result.provider,
-                    model: result.model
+                    model: result.model,
+                    tokensUsed: result.usage?.total_tokens || 0,
+                    cost: this.calculateCost(result.usage?.total_tokens || 0, modelToUse)
                 };
             } catch (error) {
                 console.error('Failed to parse AI response:', error);
@@ -240,8 +346,7 @@ class AIService {
 
     // Build comprehensive test case generation prompt
     buildTestCasePrompt(prompt, templateConfig) {
-        return `
-You are an expert QA engineer with extensive experience in test case design and quality assurance. Generate comprehensive test cases based on the given requirements.
+        return `You are an expert QA engineer with extensive experience in test case design and quality assurance. Generate comprehensive test cases based on the given requirements.
 
 Template Configuration:
 - Test Case Format: ${templateConfig.format || 'Given-When-Then'}
@@ -298,18 +403,21 @@ Generate test cases in valid JSON format with the following structure:
 
 Requirements and Context: ${prompt}
 
-Focus on creating realistic, executable test cases that provide comprehensive coverage while being practical for implementation.
-`;
+Focus on creating realistic, executable test cases that provide comprehensive coverage while being practical for implementation.`;
     }
 
     // Generate comprehensive bug report with AI enhancement
     async generateBugReport(input, type = 'description', additionalContext = {}) {
         const systemPrompt = this.buildBugReportPrompt(input, type, additionalContext);
 
+        // Use Pro model for complex bug analysis
+        const modelToUse = additionalContext.useAdvancedModel ? 'gemini-1.5-pro' : this.currentModel;
+
         const result = await this.callAI(systemPrompt, {
             type: 'bug_analysis',
             temperature: 0.5,
-            maxTokens: 2500
+            maxTokens: 3000,
+            model: modelToUse
         });
 
         if (result.success) {
@@ -323,6 +431,7 @@ Focus on creating realistic, executable test cases that provide comprehensive co
                     additionalContext,
                     result: parsedData,
                     tokensUsed: result.usage?.total_tokens || 0,
+                    cost: this.calculateCost(result.usage?.total_tokens || 0, modelToUse),
                     provider: result.provider,
                     model: result.model,
                     timestamp: new Date().toISOString()
@@ -331,7 +440,11 @@ Focus on creating realistic, executable test cases that provide comprehensive co
                 return {
                     success: true,
                     data: parsedData,
-                    analysisId: docResult.success ? docResult.docId : null
+                    analysisId: docResult.success ? docResult.docId : null,
+                    provider: result.provider,
+                    model: result.model,
+                    tokensUsed: result.usage?.total_tokens || 0,
+                    cost: this.calculateCost(result.usage?.total_tokens || 0, modelToUse)
                 };
             } catch (error) {
                 return {
@@ -347,8 +460,7 @@ Focus on creating realistic, executable test cases that provide comprehensive co
 
     // Build comprehensive bug report prompt
     buildBugReportPrompt(input, type, additionalContext) {
-        return `
-You are an expert QA engineer and bug analyst. Create a comprehensive, actionable bug report based on the provided information.
+        return `You are an expert QA engineer and bug analyst. Create a comprehensive, actionable bug report based on the provided information.
 
 Generate a detailed bug report in valid JSON format:
 {
@@ -409,8 +521,420 @@ ${additionalContext.environment ? `Environment Details: ${JSON.stringify(additio
 ${additionalContext.userStory ? `Related User Story: ${additionalContext.userStory}` : ''}
 ${additionalContext.feature ? `Feature Area: ${additionalContext.feature}` : ''}
 
-Analyze the information thoroughly and provide actionable insights for the QA team.
-`;
+Analyze the information thoroughly and provide actionable insights for the QA team.`;
+    }
+
+    // Grammar and document checking
+    async checkGrammar(text, options = {}) {
+        const prompt = `You are an expert technical writer and grammar checker. Review the following text for grammar, spelling, clarity, and technical accuracy.
+
+Text to review:
+${text}
+
+Provide a detailed review in JSON format:
+{
+    "overallScore": 0-100,
+    "issues": [
+        {
+            "type": "grammar|spelling|clarity|style|technical",
+            "severity": "error|warning|suggestion",
+            "line": 1,
+            "original": "text with issue",
+            "suggestion": "corrected text",
+            "explanation": "why this is an issue",
+            "position": { "start": 0, "end": 10 }
+        }
+    ],
+    "summary": {
+        "totalIssues": 0,
+        "errors": 0,
+        "warnings": 0,
+        "suggestions": 0
+    },
+    "improvements": [
+        "General improvement suggestion 1",
+        "General improvement suggestion 2"
+    ],
+    "correctedText": "fully corrected version of the text"
+}
+
+Focus on: ${options.focus || 'grammar, spelling, clarity, and technical accuracy'}`;
+
+        const result = await this.callAI(prompt, {
+            type: 'grammar_check',
+            temperature: 0.3,
+            maxTokens: 3000
+        });
+
+        if (result.success) {
+            try {
+                const parsedData = this.parseJSONResponse(result.data);
+                
+                await this.firestoreService.createDocument('ai_grammar_checks', {
+                    originalText: text,
+                    result: parsedData,
+                    tokensUsed: result.usage?.total_tokens || 0,
+                    cost: this.calculateCost(result.usage?.total_tokens || 0, this.currentModel),
+                    provider: result.provider,
+                    model: result.model,
+                    timestamp: new Date().toISOString()
+                });
+
+                return {
+                    success: true,
+                    data: parsedData,
+                    provider: result.provider,
+                    model: result.model
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error: 'Failed to parse grammar check results',
+                    rawResponse: result.data
+                };
+            }
+        }
+
+        return result;
+    }
+
+    // Generate improvement suggestions for team performance
+    async generateTeamImprovements(teamData) {
+        const prompt = `You are an expert QA consultant. Analyze this team's performance data and provide actionable improvement suggestions.
+
+Team Performance Data:
+${JSON.stringify(teamData, null, 2)}
+
+Generate comprehensive improvement suggestions in JSON format:
+{
+    "overallAssessment": {
+        "strengths": ["strength 1", "strength 2"],
+        "weaknesses": ["weakness 1", "weakness 2"],
+        "score": 0-100,
+        "trend": "improving|declining|stable"
+    },
+    "recommendations": [
+        {
+            "category": "process|tools|training|automation|communication",
+            "priority": "critical|high|medium|low",
+            "title": "Short recommendation title",
+            "description": "Detailed explanation",
+            "expectedImpact": "Description of expected improvement",
+            "implementationSteps": ["Step 1", "Step 2"],
+            "estimatedEffort": "low|medium|high",
+            "estimatedTimeframe": "1-2 weeks|1-3 months|3-6 months"
+        }
+    ],
+    "metrics": {
+        "currentProductivity": 0-100,
+        "potentialProductivity": 0-100,
+        "qualityScore": 0-100,
+        "automationOpportunities": 0-100
+    },
+    "quickWins": [
+        "Quick improvement 1",
+        "Quick improvement 2"
+    ]
+}`;
+
+        const result = await this.callAI(prompt, {
+            type: 'team_improvement',
+            temperature: 0.6,
+            maxTokens: 3000,
+            model: 'gemini-1.5-pro' // Use advanced model for team analysis
+        });
+
+        if (result.success) {
+            try {
+                const parsedData = this.parseJSONResponse(result.data);
+                
+                await this.firestoreService.createDocument('ai_team_improvements', {
+                    teamData,
+                    result: parsedData,
+                    tokensUsed: result.usage?.total_tokens || 0,
+                    cost: this.calculateCost(result.usage?.total_tokens || 0, result.model),
+                    provider: result.provider,
+                    model: result.model,
+                    timestamp: new Date().toISOString()
+                });
+
+                return {
+                    success: true,
+                    data: parsedData,
+                    provider: result.provider,
+                    model: result.model
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error: 'Failed to parse improvement suggestions',
+                    rawResponse: result.data
+                };
+            }
+        }
+
+        return result;
+    }
+
+    // Auto-detect automatable test cases
+    async detectAutomationOpportunities(testCases) {
+        const prompt = `You are an expert test automation architect. Analyze these test cases and identify automation opportunities.
+
+Test Cases:
+${JSON.stringify(testCases, null, 2)}
+
+Generate automation analysis in JSON format:
+{
+    "summary": {
+        "totalTestCases": 0,
+        "highAutomationPotential": 0,
+        "mediumAutomationPotential": 0,
+        "lowAutomationPotential": 0,
+        "notRecommended": 0
+    },
+    "automationAnalysis": [
+        {
+            "testCaseId": "test_id",
+            "testCaseTitle": "test title",
+            "automationPotential": "high|medium|low|not-recommended",
+            "automationScore": 0-100,
+            "reasoning": "Why this test should/shouldn't be automated",
+            "recommendedFramework": "Selenium|Cypress|Playwright|Jest|Pytest|etc",
+            "complexity": "simple|moderate|complex",
+            "estimatedEffort": "low|medium|high",
+            "priority": "critical|high|medium|low",
+            "benefits": ["benefit 1", "benefit 2"],
+            "challenges": ["challenge 1", "challenge 2"],
+            "implementationApproach": "Step-by-step approach"
+        }
+    ],
+    "recommendations": {
+        "automationStrategy": "Recommended overall strategy",
+        "priorityOrder": ["test_id_1", "test_id_2"],
+        "toolRecommendations": ["tool 1", "tool 2"],
+        "estimatedROI": "Description of ROI"
+    }
+}`;
+
+        const result = await this.callAI(prompt, {
+            type: 'automation_detection',
+            temperature: 0.5,
+            maxTokens: 4000,
+            model: 'gemini-1.5-pro'
+        });
+
+        if (result.success) {
+            try {
+                const parsedData = this.parseJSONResponse(result.data);
+                
+                await this.firestoreService.createDocument('ai_automation_analysis', {
+                    testCases,
+                    result: parsedData,
+                    tokensUsed: result.usage?.total_tokens || 0,
+                    cost: this.calculateCost(result.usage?.total_tokens || 0, result.model),
+                    provider: result.provider,
+                    model: result.model,
+                    timestamp: new Date().toISOString()
+                });
+
+                return {
+                    success: true,
+                    data: parsedData,
+                    provider: result.provider,
+                    model: result.model
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error: 'Failed to parse automation analysis',
+                    rawResponse: result.data
+                };
+            }
+        }
+
+        return result;
+    }
+
+    // Generate comprehensive QA reports
+    async generateQAReport(reportData, reportType = 'sprint') {
+        const prompt = `You are an expert QA manager. Generate a comprehensive ${reportType} report based on this data.
+
+Report Data:
+${JSON.stringify(reportData, null, 2)}
+
+Generate a detailed report in JSON format:
+{
+    "title": "Report title",
+    "period": "Time period covered",
+    "executiveSummary": "High-level summary for stakeholders",
+    "keyMetrics": {
+        "totalTests": 0,
+        "passRate": 0.0,
+        "failRate": 0.0,
+        "blockedTests": 0,
+        "defectsFound": 0,
+        "criticalDefects": 0,
+        "testCoverage": 0.0
+    },
+    "sections": [
+        {
+            "title": "Section title",
+            "content": "Section content",
+            "charts": [
+                {
+                    "type": "bar|line|pie",
+                    "title": "Chart title",
+                    "data": {}
+                }
+            ]
+        }
+    ],
+    "achievements": [
+        "Achievement 1",
+        "Achievement 2"
+    ],
+    "concerns": [
+        {
+            "issue": "Issue description",
+            "severity": "critical|high|medium|low",
+            "recommendation": "How to address"
+        }
+    ],
+    "recommendations": [
+        "Recommendation 1",
+        "Recommendation 2"
+    ],
+    "nextSteps": [
+        "Next step 1",
+        "Next step 2"
+    ]
+}`;
+
+        const result = await this.callAI(prompt, {
+            type: 'qa_report_generation',
+            temperature: 0.5,
+            maxTokens: 4000,
+            model: 'gemini-1.5-pro'
+        });
+
+        if (result.success) {
+            try {
+                const parsedData = this.parseJSONResponse(result.data);
+                
+                await this.firestoreService.createDocument('ai_qa_reports', {
+                    reportType,
+                    reportData,
+                    result: parsedData,
+                    tokensUsed: result.usage?.total_tokens || 0,
+                    cost: this.calculateCost(result.usage?.total_tokens || 0, result.model),
+                    provider: result.provider,
+                    model: result.model,
+                    timestamp: new Date().toISOString()
+                });
+
+                return {
+                    success: true,
+                    data: parsedData,
+                    provider: result.provider,
+                    model: result.model
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error: 'Failed to parse QA report',
+                    rawResponse: result.data
+                };
+            }
+        }
+
+        return result;
+    }
+
+    // Generate test documentation
+    async generateDocumentation(content, docType = 'test_plan') {
+        const prompt = `You are an expert technical writer specializing in QA documentation. Generate professional ${docType} documentation.
+
+Content/Requirements:
+${content}
+
+Generate comprehensive documentation in JSON format:
+{
+    "title": "Document title",
+    "version": "1.0",
+    "sections": [
+        {
+            "heading": "Section heading",
+            "content": "Section content with proper formatting",
+            "subsections": [
+                {
+                    "heading": "Subsection heading",
+                    "content": "Subsection content"
+                }
+            ]
+        }
+    ],
+    "tables": [
+        {
+            "title": "Table title",
+            "headers": ["Column 1", "Column 2"],
+            "rows": [
+                ["Data 1", "Data 2"]
+            ]
+        }
+    ],
+    "appendices": [
+        {
+            "title": "Appendix title",
+            "content": "Appendix content"
+        }
+    ],
+    "metadata": {
+        "author": "AI Assistant",
+        "lastUpdated": "${new Date().toISOString()}",
+        "status": "draft",
+        "reviewers": []
+    }
+}
+
+Include: Introduction, Scope, Test Approach, Test Environment, Test Schedule, Deliverables, Entry/Exit Criteria, Risks, and Approvals sections as appropriate for ${docType}.`;
+
+        const result = await this.callAI(prompt, {
+            type: 'documentation_generation',
+            temperature: 0.4,
+            maxTokens: 4000
+        });
+
+        if (result.success) {
+            try {
+                const parsedData = this.parseJSONResponse(result.data);
+                
+                await this.firestoreService.createDocument('ai_documentation', {
+                    docType,
+                    content,
+                    result: parsedData,
+                    tokensUsed: result.usage?.total_tokens || 0,
+                    cost: this.calculateCost(result.usage?.total_tokens || 0, this.currentModel),
+                    provider: result.provider,
+                    model: result.model,
+                    timestamp: new Date().toISOString()
+                });
+
+                return {
+                    success: true,
+                    data: parsedData,
+                    provider: result.provider,
+                    model: result.model
+                };
+            } catch (error) {
+                return {
+                    success: false,
+                    error: 'Failed to parse documentation',
+                    rawResponse: result.data
+                };
+            }
+        }
+
+        return result;
     }
 
     // Helper method to parse JSON responses safely
@@ -433,6 +957,19 @@ Analyze the information thoroughly and provide actionable insights for the QA te
 
             return JSON.parse(cleanedResponse);
         }
+    }
+
+    // Estimate token count (rough estimation)
+    estimateTokens(text) {
+        // Rough estimation: ~4 characters per token for English text
+        return Math.ceil(text.length / 4);
+    }
+
+    // Calculate cost based on tokens and model
+    calculateCost(tokens, model = null) {
+        const modelToUse = model || this.currentModel;
+        const costPer1k = this.models[modelToUse]?.costPer1kTokens || 0.0001;
+        return (tokens / 1000) * costPer1k;
     }
 
     // Log AI usage
@@ -528,6 +1065,17 @@ Analyze the information thoroughly and provide actionable insights for the QA te
         const totalTestCases = allTestCases.length;
         const avgTestCasesPerGeneration = totalAIGenerations > 0 ? totalTestCases / totalAIGenerations : 0;
 
+        // Cost calculations
+        const totalCost = usageLogs.reduce((sum, log) => sum + (log.cost || 0), 0);
+        const totalTokens = usageLogs.reduce((sum, log) => sum + (log.tokensUsed || 0), 0);
+
+        // Model usage breakdown
+        const modelUsage = {};
+        usageLogs.forEach(log => {
+            const model = log.model || 'unknown';
+            modelUsage[model] = (modelUsage[model] || 0) + 1;
+        });
+
         return {
             totalAIGenerations,
             successfulGenerations,
@@ -545,10 +1093,14 @@ Analyze the information thoroughly and provide actionable insights for the QA te
             securityTestsGenerated: testTypeBreakdown.security,
             bugSuggestionsGenerated: bugAnalyses.length,
             estimatedTimeSavedHours: Math.round((totalTestCases * 5) / 60 * 10) / 10,
+            totalCost: totalCost.toFixed(4),
+            totalTokensUsed: totalTokens,
+            modelUsageBreakdown: modelUsage,
+            currentModel: this.currentModel,
+            availableModels: Object.keys(this.models),
             lastUpdated: new Date().toISOString(),
             dateRange,
-            provider: 'gemini',
-            model: this.config.model
+            provider: 'gemini'
         };
     }
 
@@ -569,14 +1121,20 @@ Analyze the information thoroughly and provide actionable insights for the QA te
                         generatedAt: new Date().toISOString(),
                         dateRange: `${dateRange} days`,
                         format: 'json',
-                        version: '1.0',
-                        provider: 'gemini'
+                        version: '2.0',
+                        provider: 'gemini',
+                        currentModel: this.currentModel
                     },
                     metrics,
+                    modelComparison: this.getAvailableModels(),
                     summary: {
                         totalGenerations: metrics.totalAIGenerations,
                         successRate: `${metrics.aiSuccessRate.toFixed(2)}%`,
-                        timeSaved: `${metrics.estimatedTimeSavedHours} hours`
+                        timeSaved: `${metrics.estimatedTimeSavedHours} hours`,
+                        totalCost: `${metrics.totalCost}`,
+                        costPerGeneration: metrics.totalAIGenerations > 0 
+                            ? `${(parseFloat(metrics.totalCost) / metrics.totalAIGenerations).toFixed(4)}`
+                            : '$0'
                     }
                 };
 
@@ -589,12 +1147,20 @@ Analyze the information thoroughly and provide actionable insights for the QA te
             } else if (format === 'csv') {
                 const csvRows = [
                     ['Metric', 'Value', 'Description'],
+                    ['Current Model', this.currentModel, this.models[this.currentModel]?.displayName],
                     ['Total AI Generations', metrics.totalAIGenerations, 'Total number of AI-powered generations'],
                     ['Success Rate', `${metrics.aiSuccessRate.toFixed(2)}%`, 'Percentage of successful AI calls'],
                     ['Average Generation Time', `${metrics.avgGenerationTimeSeconds}s`, 'Average time per generation'],
-                    ['Gemini API Calls', metrics.geminiCallsCount, 'Total API calls to Gemini'],
+                    ['Total API Calls', metrics.totalAPICallsCount, 'Total API calls to Gemini'],
+                    ['Total Tokens Used', metrics.totalTokensUsed, 'Total tokens consumed'],
+                    ['Total Cost', `${metrics.totalCost}`, 'Total API cost'],
                     ['Functional Tests Generated', metrics.functionalTestsGenerated, 'Number of functional test cases'],
-                    ['Time Saved', `${metrics.estimatedTimeSavedHours}h`, 'Estimated manual work time saved']
+                    ['Time Saved', `${metrics.estimatedTimeSavedHours}h`, 'Estimated manual work time saved'],
+                    ['', '', ''],
+                    ['Model', 'Usage Count', 'Cost Per 1K Tokens'],
+                    ...Object.entries(metrics.modelUsageBreakdown).map(([model, count]) => 
+                        [model, count, `${this.models[model]?.costPer1kTokens || 0}`]
+                    )
                 ];
 
                 const csvContent = csvRows.map(row => row.map(cell => `"${cell}"`).join(',')).join('\n');
@@ -635,34 +1201,74 @@ Analyze the information thoroughly and provide actionable insights for the QA te
             securityTestsGenerated: 0,
             bugSuggestionsGenerated: 0,
             estimatedTimeSavedHours: 0,
+            totalCost: '0.0000',
+            totalTokensUsed: 0,
+            modelUsageBreakdown: {},
+            currentModel: this.currentModel,
+            availableModels: Object.keys(this.models),
             lastUpdated: new Date().toISOString(),
-            provider: 'gemini',
-            model: this.config.model
+            provider: 'gemini'
         };
     }
 
-    // Compatibility methods
+    // Compatibility methods for existing integrations
     async testHealth() {
         return await this.testConnection();
     }
 
-    getServiceStatus() {
+    getCurrentProvider() {
         return {
-            initialized: this.isHealthy,
-            healthy: this.isHealthy,
             provider: 'gemini',
-            model: this.config.model,
-            lastHealthCheck: this.lastHealthCheck,
-            error: this.isHealthy ? null : 'Service not healthy'
+            model: this.currentModel,
+            config: {
+                model: this.currentModel,
+                apiKey: this.apiKey ? '***configured***' : 'not configured',
+                temperature: this.temperature,
+                maxTokens: this.models[this.currentModel]?.maxTokens
+            }
         };
     }
 
     getSupportedProviders() {
         return [{
             name: 'gemini',
-            model: this.config.model,
-            configured: !!this.config.apiKey
+            models: this.getAvailableModels(),
+            currentModel: this.currentModel
         }];
+    }
+
+    // Model performance comparison helper
+    getModelComparison() {
+        return Object.entries(this.models).map(([key, model]) => ({
+            id: key,
+            name: model.displayName,
+            costPer1kTokens: model.costPer1kTokens,
+            maxTokens: model.maxTokens,
+            description: model.description,
+            recommended: model.recommended || false,
+            isActive: key === this.currentModel,
+            estimatedCostFor10kTokens: (model.costPer1kTokens * 10).toFixed(4)
+        }));
+    }
+
+    // Update configuration
+    updateConfig(config) {
+        if (config.model && this.models[config.model]) {
+            this.switchModel(config.model);
+        }
+
+        if (config.temperature !== undefined) {
+            this.temperature = Math.max(0, Math.min(2, config.temperature));
+        }
+
+        return {
+            success: true,
+            currentConfig: {
+                model: this.currentModel,
+                temperature: this.temperature,
+                apiKeyConfigured: !!this.apiKey
+            }
+        };
     }
 }
 

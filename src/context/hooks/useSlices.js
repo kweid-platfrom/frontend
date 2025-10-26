@@ -8,10 +8,10 @@ import { useSubscription } from '../slices/subscriptionSlice';
 import { useTeam } from '../slices/teamSlice';
 import { useAutomation } from '../slices/automationSlice';
 import { useUI } from '../slices/uiSlice';
-import { useAI } from '../slices/aiSlice';
+// REMOVED: import { useAISlice } from '../slices/aiSlice';
 import { useTheme } from '../slices/themeSlice';
 import { useReports } from '../slices/reportSlice';
-import { useRecommendations } from '../slices/recommendationsSlice'; // Add this import
+import { useRecommendations } from '../slices/recommendationsSlice';
 
 export const useSlices = () => ({
     auth: useAuthSlice(),
@@ -24,10 +24,10 @@ export const useSlices = () => ({
     team: useTeam(),
     automation: useAutomation(),
     ui: useUI(),
-    ai: useAI(),
+    // REMOVED: ai: useAISlice(),
     reports: useReports(),
     theme: useTheme(),
-    recommendations: useRecommendations(), // Add this line
+    recommendations: useRecommendations(),
 });
 
 export const getAppState = (slices) => ({
@@ -41,10 +41,10 @@ export const getAppState = (slices) => ({
     team: slices.team.state,
     automation: slices.automation.state,
     ui: slices.ui.state,
-    ai: slices.ai.state,
+    // REMOVED: ai: slices.ai.state,
     reports: slices.reports.state,
     theme: slices.theme.state,
-    recommendations: slices.recommendations.state, // Add this line
+    recommendations: slices.recommendations.state,
 });
 
 export const getAppActions = (slices) => ({
@@ -58,8 +58,8 @@ export const getAppActions = (slices) => ({
     team: slices.team.actions,
     automation: slices.automation.actions,
     ui: slices.ui.actions,
-    ai: slices.ai.actions,
+    // REMOVED: ai: slices.ai.actions,
     reports: slices.reports.actions,
     theme: slices.theme.actions,
-    recommendations: slices.recommendations.actions, // Add this line
+    recommendations: slices.recommendations.actions,
 });

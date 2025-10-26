@@ -37,12 +37,23 @@ const RecordingViewerLeftPanel = ({
 
   // Update current video time
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
+    const player = videoRef?.current;
+    if (!player) return;
 
-    const updateTime = () => setCurrentVideoTime(video.currentTime);
-    video.addEventListener('timeupdate', updateTime);
-    return () => video.removeEventListener('timeupdate', updateTime);
+    // For YouTube player, poll for current time
+    const updateTime = () => {
+      if (player.getCurrentTime && typeof player.getCurrentTime === 'function') {
+        const time = player.getCurrentTime();
+        if (time && !isNaN(time)) {
+          setCurrentVideoTime(time);
+        }
+      }
+    };
+
+    // Poll every 100ms for YouTube player
+    const intervalId = setInterval(updateTime, 100);
+    
+    return () => clearInterval(intervalId);
   }, [videoRef]);
 
   // Scroll to latest comment

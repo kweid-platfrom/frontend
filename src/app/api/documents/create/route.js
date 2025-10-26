@@ -1,22 +1,18 @@
-// app/api/documents/create/route.js - Create document with Google Docs integration
+// ============================================
+// app/api/documents/create/route.js
+// Creates document metadata in Firestore ONLY
+// NO Google Docs integration
+// ============================================
 import { NextResponse } from 'next/server';
-import { verifyFirebaseAuth } from '@/lib/firebaseAuthMiddleware';
 import firestoreService from '@/services';
 
 export async function POST(request) {
+    console.log('📄 Creating Firestore document...');
+    
     try {
-        // Verify Firebase authentication
-        const { user, error } = await verifyFirebaseAuth(request);
-        
-        if (error || !user) {
-            return NextResponse.json(
-                { success: false, error: { message: error || 'Unauthorized' } },
-                { status: 401 }
-            );
-        }
-
         const { suiteId, sprintId, documentData } = await request.json();
 
+        // Validation
         if (!suiteId) {
             return NextResponse.json(
                 { success: false, error: { message: 'Suite ID is required' } },
@@ -31,22 +27,23 @@ export async function POST(request) {
             );
         }
 
-        // Pass user info to the service if needed
+        // Create document in Firestore only
+        // Firebase Security Rules handle all auth & permissions
         const result = await firestoreService.createDocument(
             suiteId,
             documentData,
-            sprintId,
-            user.uid // Pass authenticated user ID
+            sprintId
         );
 
         if (result.success) {
-            return NextResponse.json(result);
+            console.log('✅ Firestore document created');
+            return NextResponse.json(result, { status: 201 });
         } else {
             return NextResponse.json(result, { status: 500 });
         }
 
     } catch (error) {
-        console.error('Error in create document API:', error);
+        console.error('❌ Firestore document creation failed:', error);
         return NextResponse.json(
             {
                 success: false,
