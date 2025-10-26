@@ -1,53 +1,50 @@
-// app/api/documents/update/route.js - Update document
-export async function PUT(request) {
-    try {
-        const session = await getServerSession(authOptions);
-        if (!session) {
-            return NextResponse.json(
-                { success: false, error: { message: 'Unauthorized' } },
-                { status: 401 }
-            );
-        }
+// ============================================
+// app/api/documents/update/route.js (if needed)
+// Updates Firestore document metadata ONLY
+// NO Google Docs integration
+// ============================================
+import { NextResponse } from 'next/server';
+import firestoreService from '@/services';
 
+export async function PUT(request) {
+    console.log('📝 Updating Firestore document...');
+    
+    try {
         const { documentId, suiteId, sprintId, updates } = await request.json();
 
         if (!documentId || !suiteId) {
             return NextResponse.json(
-                { success: false, error: { message: 'Document ID and Suite ID are required' } },
+                { success: false, error: { message: 'Document ID and Suite ID required' } },
                 { status: 400 }
             );
         }
 
-        if (!updates || typeof updates !== 'object') {
-            return NextResponse.json(
-                { success: false, error: { message: 'Updates object is required' } },
-                { status: 400 }
-            );
-        }
-
+        // Update Firestore only
+        // Firebase Security Rules handle all auth & permissions
         const result = await firestoreService.updateDocument(
             documentId,
-            updates,
+            {
+                ...updates,
+                metadata: {
+                    ...(updates.metadata || {}),
+                    lastModified: new Date().toISOString()
+                }
+            },
             suiteId,
             sprintId
         );
 
         if (result.success) {
-            return NextResponse.json(result);
-        } else {
-            return NextResponse.json(result, { status: 500 });
+            console.log('✅ Firestore document updated');
         }
 
+        return NextResponse.json(result);
+
     } catch (error) {
-        console.error('Error in update document API:', error);
+        console.error('❌ Firestore document update failed:', error);
+        
         return NextResponse.json(
-            {
-                success: false,
-                error: {
-                    message: 'Internal server error',
-                    details: error.message
-                }
-            },
+            { success: false, error: { message: error.message } },
             { status: 500 }
         );
     }

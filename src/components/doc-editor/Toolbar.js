@@ -9,60 +9,52 @@ import {
   FORMAT_ELEMENT_COMMAND,
   UNDO_COMMAND,
   REDO_COMMAND,
-  CLEAR_EDITOR_COMMAND,
-  $getRoot
+  $getRoot,
+  $createParagraphNode,
+  SELECTION_CHANGE_COMMAND,
+  CAN_UNDO_COMMAND,
+  CAN_REDO_COMMAND,
+  COMMAND_PRIORITY_LOW,
+  KEY_MODIFIER_COMMAND
 } from 'lexical';
-import { $createHeadingNode, $createQuoteNode } from '@lexical/rich-text';
+import { 
+  $isHeadingNode,
+  $createHeadingNode, 
+  $createQuoteNode,
+  HeadingTagType 
+} from '@lexical/rich-text';
 import { 
   INSERT_ORDERED_LIST_COMMAND, 
   INSERT_UNORDERED_LIST_COMMAND,
-  INSERT_CHECK_LIST_COMMAND
+  INSERT_CHECK_LIST_COMMAND,
+  REMOVE_LIST_COMMAND,
+  $isListNode
 } from '@lexical/list';
-import { INSERT_HORIZONTAL_RULE_COMMAND } from '@lexical/react/LexicalHorizontalRuleNode';
-import { $createCodeNode } from '@lexical/code';
+import { $createCodeNode, $isCodeNode } from '@lexical/code';
+import { $setBlocksType } from '@lexical/selection';
 import { 
   Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, 
-  AlignRight, AlignJustify, List, ListOrdered, Quote, Link2, 
-  Code, Undo, Redo, ChevronDown, Type, Palette, Trash2,
-  Minus, CheckSquare, FileCode, Superscript, Subscript,
-  RemoveFormatting, FileDown
+  AlignRight, AlignJustify, List, ListOrdered, Quote,
+  Code, Undo, Redo, CheckSquare, FileCode,
+  RemoveFormatting, Search, Replace, BookOpen, FileType
 } from 'lucide-react';
 
-const FONT_FAMILY_OPTIONS = [
-  ['Arial', 'Arial'],
-  ['Courier New', 'Courier New'],
-  ['Georgia', 'Georgia'],
-  ['Times New Roman', 'Times New Roman'],
-  ['Trebuchet MS', 'Trebuchet MS'],
-  ['Verdana', 'Verdana'],
-  ['Comic Sans MS', 'Comic Sans MS'],
-  ['Impact', 'Impact'],
-];
-
-const FONT_SIZE_OPTIONS = [
-  ['10px', '10px'],
-  ['11px', '11px'],
-  ['12px', '12px'],
-  ['14px', '14px'],
-  ['16px', '16px'],
-  ['18px', '18px'],
-  ['20px', '20px'],
-  ['24px', '24px'],
-  ['28px', '28px'],
-  ['32px', '32px'],
-  ['40px', '40px'],
-  ['48px', '48px'],
-];
-
 const TEXT_COLORS = [
-  '#000000', '#434343', '#666666', '#999999', '#cccccc',
-  '#e74c3c', '#e67e22', '#f39c12', '#f1c40f', '#2ecc71',
-  '#1abc9c', '#3498db', '#9b59b6', '#34495e', '#ffffff'
+  { color: '#000000', label: 'Black' },
+  { color: '#e74c3c', label: 'Red' },
+  { color: '#f39c12', label: 'Orange' },
+  { color: '#2ecc71', label: 'Green' },
+  { color: '#3498db', label: 'Blue' },
+  { color: '#9b59b6', label: 'Purple' },
 ];
 
 const BACKGROUND_COLORS = [
-  'transparent', '#fef5e7', '#fdebd0', '#fadbd8', '#f5eef8',
-  '#e8f8f5', '#e8f6f3', '#ebf5fb', '#eaf2f8', '#f4ecf7'
+  { color: 'transparent', label: 'None' },
+  { color: '#fef5e7', label: 'Yellow' },
+  { color: '#fadbd8', label: 'Red' },
+  { color: '#e8f8f5', label: 'Green' },
+  { color: '#ebf5fb', label: 'Blue' },
+  { color: '#f4ecf7', label: 'Purple' },
 ];
 
 export default function CompleteToolbar() {
@@ -74,15 +66,10 @@ export default function CompleteToolbar() {
   const [isUnderline, setIsUnderline] = useState(false);
   const [isStrikethrough, setIsStrikethrough] = useState(false);
   const [isCode, setIsCode] = useState(false);
-  const [isSuperscript, setIsSuperscript] = useState(false);
-  const [isSubscript, setIsSubscript] = useState(false);
-  const [fontFamily, setFontFamily] = useState('Arial');
-  const [fontSize, setFontSize] = useState('16px');
   const [blockType, setBlockType] = useState('paragraph');
-  const [showTextColor, setShowTextColor] = useState(false);
-  const [showBgColor, setShowBgColor] = useState(false);
-  const [showLinkInput, setShowLinkInput] = useState(false);
-  const [linkUrl, setLinkUrl] = useState('');
+  const [showFindReplace, setShowFindReplace] = useState(false);
+  const [findText, setFindText] = useState('');
+  const [replaceText, setReplaceText] = useState('');
 
   const updateToolbar = useCallback(() => {
     const selection = $getSelection();
@@ -92,40 +79,70 @@ export default function CompleteToolbar() {
       setIsUnderline(selection.hasFormat('underline'));
       setIsStrikethrough(selection.hasFormat('strikethrough'));
       setIsCode(selection.hasFormat('code'));
-      setIsSuperscript(selection.hasFormat('superscript'));
-      setIsSubscript(selection.hasFormat('subscript'));
+
+      const anchorNode = selection.anchor.getNode();
+      const element =
+        anchorNode.getKey() === 'root'
+          ? anchorNode
+          : anchorNode.getTopLevelElementOrThrow();
+      const elementKey = element.getKey();
+      const elementDOM = editor.getElementByKey(elementKey);
+
+      if (elementDOM !== null) {
+        if ($isListNode(element)) {
+          const parentList = element;
+          const type = parentList.getListType();
+          setBlockType(type);
+        } else {
+          const type = $isHeadingNode(element)
+            ? element.getTag()
+            : element.getType();
+          setBlockType(type);
+        }
+      }
     }
-  }, []);
-
-  useEffect(() => {
-    return editor.registerCommand(
-      UNDO_COMMAND,
-      () => {
-        setCanUndo(editor.getEditorState().canUndo);
-        return false;
-      },
-      1
-    );
   }, [editor]);
 
   useEffect(() => {
     return editor.registerCommand(
-      REDO_COMMAND,
+      SELECTION_CHANGE_COMMAND,
       () => {
-        setCanRedo(editor.getEditorState().canRedo);
-        return false;
-      },
-      1
-    );
-  }, [editor]);
-
-  useEffect(() => {
-    return editor.registerUpdateListener(({ editorState }) => {
-      editorState.read(() => {
         updateToolbar();
-      });
-    });
+        return false;
+      },
+      COMMAND_PRIORITY_LOW
+    );
   }, [editor, updateToolbar]);
+
+  useEffect(() => {
+    return editor.registerCommand(
+      CAN_UNDO_COMMAND,
+      (payload) => {
+        setCanUndo(payload);
+        return false;
+      },
+      COMMAND_PRIORITY_LOW
+    );
+  }, [editor]);
+
+  useEffect(() => {
+    return editor.registerCommand(
+      CAN_REDO_COMMAND,
+      (payload) => {
+        setCanRedo(payload);
+        return false;
+      },
+      COMMAND_PRIORITY_LOW
+    );
+  }, [editor]);
+
+  const handleUndo = useCallback(() => {
+    editor.dispatchCommand(UNDO_COMMAND, undefined);
+  }, [editor]);
+
+  const handleRedo = useCallback(() => {
+    editor.dispatchCommand(REDO_COMMAND, undefined);
+  }, [editor]);
 
   const formatText = (format) => {
     editor.dispatchCommand(FORMAT_TEXT_COMMAND, format);
@@ -135,62 +152,76 @@ export default function CompleteToolbar() {
     editor.dispatchCommand(FORMAT_ELEMENT_COMMAND, alignment);
   };
 
-  const formatHeading = (headingSize) => {
-    editor.update(() => {
-      const selection = $getSelection();
-      if ($isRangeSelection(selection)) {
-        const nodes = selection.getNodes();
-        nodes.forEach((node) => {
-          const parent = node.getParent();
-          if (parent) {
-            const headingNode = $createHeadingNode(headingSize);
-            parent.replace(headingNode);
-            headingNode.append(node);
-          }
-        });
-      }
-    });
+  const formatHeading = (headingTag) => {
+    if (blockType !== headingTag) {
+      editor.update(() => {
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          $setBlocksType(selection, () => $createHeadingNode(headingTag));
+        }
+      });
+      setBlockType(headingTag);
+    } else {
+      formatParagraph();
+    }
+  };
+
+  const formatParagraph = () => {
+    if (blockType !== 'paragraph') {
+      editor.update(() => {
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          $setBlocksType(selection, () => $createParagraphNode());
+        }
+      });
+      setBlockType('paragraph');
+    }
   };
 
   const formatQuote = () => {
-    editor.update(() => {
-      const selection = $getSelection();
-      if ($isRangeSelection(selection)) {
-        const nodes = selection.getNodes();
-        nodes.forEach((node) => {
-          const parent = node.getParent();
-          if (parent) {
-            const quoteNode = $createQuoteNode();
-            parent.replace(quoteNode);
-            quoteNode.append(node);
-          }
-        });
-      }
-    });
+    if (blockType !== 'quote') {
+      editor.update(() => {
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          $setBlocksType(selection, () => $createQuoteNode());
+        }
+      });
+      setBlockType('quote');
+    }
   };
 
   const formatCodeBlock = () => {
-    editor.update(() => {
-      const selection = $getSelection();
-      if ($isRangeSelection(selection)) {
-        const codeNode = $createCodeNode();
-        selection.insertNodes([codeNode]);
-      }
-    });
+    if (blockType !== 'code') {
+      editor.update(() => {
+        const selection = $getSelection();
+        if ($isRangeSelection(selection)) {
+          $setBlocksType(selection, () => $createCodeNode());
+        }
+      });
+      setBlockType('code');
+    }
   };
 
   const insertList = (listType) => {
     if (listType === 'bullet') {
-      editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
+      if (blockType !== 'bullet') {
+        editor.dispatchCommand(INSERT_UNORDERED_LIST_COMMAND, undefined);
+      } else {
+        editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
+      }
     } else if (listType === 'number') {
-      editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined);
+      if (blockType !== 'number') {
+        editor.dispatchCommand(INSERT_ORDERED_LIST_COMMAND, undefined);
+      } else {
+        editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
+      }
     } else if (listType === 'check') {
-      editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined);
+      if (blockType !== 'check') {
+        editor.dispatchCommand(INSERT_CHECK_LIST_COMMAND, undefined);
+      } else {
+        editor.dispatchCommand(REMOVE_LIST_COMMAND, undefined);
+      }
     }
-  };
-
-  const insertHorizontalRule = () => {
-    editor.dispatchCommand(INSERT_HORIZONTAL_RULE_COMMAND, undefined);
   };
 
   const clearFormatting = () => {
@@ -198,7 +229,7 @@ export default function CompleteToolbar() {
       const selection = $getSelection();
       if ($isRangeSelection(selection)) {
         selection.getNodes().forEach((node) => {
-          if (node.getType() === 'text') {
+          if (node.__type === 'text') {
             node.setFormat(0);
             node.setStyle('');
           }
@@ -207,19 +238,13 @@ export default function CompleteToolbar() {
     });
   };
 
-  const clearEditor = () => {
-    if (window.confirm('Are you sure you want to clear all content?')) {
-      editor.dispatchCommand(CLEAR_EDITOR_COMMAND, undefined);
-    }
-  };
-
   const applyStyleText = (styles) => {
     editor.update(() => {
       const selection = $getSelection();
       if ($isRangeSelection(selection)) {
         selection.getNodes().forEach((node) => {
-          if (node.getType() === 'text') {
-            const currentStyle = node.getStyle();
+          if (node.__type === 'text') {
+            const currentStyle = node.getStyle() || '';
             let newStyle = currentStyle;
             Object.keys(styles).forEach((key) => {
               const regex = new RegExp(`${key}:\\s*[^;]+;?`, 'gi');
@@ -233,286 +258,319 @@ export default function CompleteToolbar() {
     });
   };
 
-  const insertLink = () => {
-    if (linkUrl) {
-      editor.update(() => {
-        const selection = $getSelection();
-        if ($isRangeSelection(selection)) {
-          // For full link implementation, you'd need @lexical/link plugin
-          // This is a placeholder showing the UI
-          alert('Link plugin needed: ' + linkUrl);
-        }
-      });
-      setShowLinkInput(false);
-      setLinkUrl('');
-    }
-  };
-
-  const exportDocument = (format) => {
-    editor.getEditorState().read(() => {
+  const handleFind = () => {
+    if (!findText) return;
+    
+    editor.update(() => {
       const root = $getRoot();
-      const text = root.getTextContent();
+      const textContent = root.getTextContent();
+      const index = textContent.toLowerCase().indexOf(findText.toLowerCase());
       
-      if (format === 'txt') {
-        const blob = new Blob([text], { type: 'text/plain' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'document.txt';
-        a.click();
-        URL.revokeObjectURL(url);
-      } else if (format === 'html') {
-        const html = root.getChildren().map(node => {
-          return `<p>${node.getTextContent()}</p>`;
-        }).join('\n');
-        const blob = new Blob([html], { type: 'text/html' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'document.html';
-        a.click();
-        URL.revokeObjectURL(url);
+      if (index !== -1) {
+        console.log('Found at index:', index);
+      } else {
+        alert('Text not found');
       }
     });
   };
 
+  const handleReplace = () => {
+    if (!findText || !replaceText) return;
+    
+    editor.update(() => {
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) {
+        const selectedText = selection.getTextContent();
+        if (selectedText.toLowerCase() === findText.toLowerCase()) {
+          selection.insertText(replaceText);
+        } else {
+          alert('Please select the text to replace first');
+        }
+      }
+    });
+  };
+
+  const handleReplaceAll = () => {
+    if (!findText || !replaceText) return;
+    
+    editor.update(() => {
+      const root = $getRoot();
+      const allTextNodes = root.getAllTextNodes();
+      let replacedCount = 0;
+      
+      allTextNodes.forEach(node => {
+        const text = node.getTextContent();
+        const regex = new RegExp(findText, 'gi');
+        if (regex.test(text)) {
+          const newText = text.replace(regex, replaceText);
+          node.setTextContent(newText);
+          replacedCount++;
+        }
+      });
+      
+      if (replacedCount > 0) {
+        alert(`Replaced ${replacedCount} occurrence(s)`);
+      } else {
+        alert('Text not found');
+      }
+    });
+  };
+
+  const getWordCount = () => {
+    let wordCount = 0;
+    editor.getEditorState().read(() => {
+      const root = $getRoot();
+      const text = root.getTextContent();
+      wordCount = text.trim().split(/\s+/).filter(word => word.length > 0).length;
+    });
+    return wordCount;
+  };
+
+  const handleBlockTypeChange = (value) => {
+    if (value === 'paragraph') formatParagraph();
+    else if (value === 'h1') formatHeading('h1');
+    else if (value === 'h2') formatHeading('h2');
+    else if (value === 'h3') formatHeading('h3');
+    else if (value === 'h4') formatHeading('h4');
+    else if (value === 'h5') formatHeading('h5');
+    else if (value === 'h6') formatHeading('h6');
+    else if (value === 'quote') formatQuote();
+    else if (value === 'code') formatCodeBlock();
+  };
+
   return (
-    <div className="border-b border-border bg-card sticky top-0 z-20 shadow-theme-sm">
-      {/* Row 1: History, Font, Size, Block Type */}
+    <div className="border-b border-border bg-card sticky top-0 z-40 shadow-sm">
+      {/* Row 1: History, Block Type, Document Tools */}
       <div className="px-4 py-2 flex items-center gap-2 border-b border-border flex-wrap">
         {/* Undo/Redo */}
         <button
-          onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)}
+          onClick={handleUndo}
           disabled={!canUndo}
           className="p-2 hover:bg-secondary rounded disabled:opacity-40 disabled:cursor-not-allowed text-foreground"
           title="Undo (Ctrl+Z)"
+          type="button"
         >
           <Undo className="w-4 h-4" />
         </button>
         <button
-          onClick={() => editor.dispatchCommand(REDO_COMMAND, undefined)}
+          onClick={handleRedo}
           disabled={!canRedo}
           className="p-2 hover:bg-secondary rounded disabled:opacity-40 disabled:cursor-not-allowed text-foreground"
           title="Redo (Ctrl+Y)"
+          type="button"
         >
           <Redo className="w-4 h-4" />
         </button>
 
         <div className="w-px h-6 bg-border mx-1" />
 
-        {/* Font Family */}
-        <select
-          value={fontFamily}
-          onChange={(e) => {
-            setFontFamily(e.target.value);
-            applyStyleText({ 'font-family': e.target.value });
-          }}
-          className="px-3 py-1.5 text-sm border border-border rounded hover:bg-secondary min-w-[140px] bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-        >
-          {FONT_FAMILY_OPTIONS.map(([option, value]) => (
-            <option key={option} value={value}>
-              {option}
-            </option>
-          ))}
-        </select>
-
-        {/* Font Size */}
-        <select
-          value={fontSize}
-          onChange={(e) => {
-            setFontSize(e.target.value);
-            applyStyleText({ 'font-size': e.target.value });
-          }}
-          className="px-3 py-1.5 text-sm border border-border rounded hover:bg-secondary min-w-[80px] bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-        >
-          {FONT_SIZE_OPTIONS.map(([option, value]) => (
-            <option key={option} value={value}>
-              {option}
-            </option>
-          ))}
-        </select>
-
-        <div className="w-px h-6 bg-border mx-1" />
-
         {/* Block Type */}
         <select
           value={blockType}
-          onChange={(e) => {
-            setBlockType(e.target.value);
-            if (e.target.value === 'h1') formatHeading('h1');
-            else if (e.target.value === 'h2') formatHeading('h2');
-            else if (e.target.value === 'h3') formatHeading('h3');
-            else if (e.target.value === 'quote') formatQuote();
-          }}
-          className="px-3 py-1.5 text-sm border border-border rounded hover:bg-secondary min-w-[120px] bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          onChange={(e) => handleBlockTypeChange(e.target.value)}
+          className="px-3 py-1.5 text-sm border border-border rounded hover:bg-secondary min-w-[140px] bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
         >
-          <option value="paragraph">Normal</option>
+          <option value="paragraph">Normal Text</option>
           <option value="h1">Heading 1</option>
           <option value="h2">Heading 2</option>
           <option value="h3">Heading 3</option>
+          <option value="h4">Heading 4</option>
+          <option value="h5">Heading 5</option>
+          <option value="h6">Heading 6</option>
           <option value="quote">Quote</option>
+          <option value="code">Code Block</option>
         </select>
 
         <div className="w-px h-6 bg-border mx-1" />
 
-        {/* Clear & Export */}
+        {/* Document Tools */}
         <button
-          onClick={clearEditor}
-          className="p-2 hover:bg-secondary rounded text-destructive"
-          title="Clear All Content"
+          onClick={() => setShowFindReplace(!showFindReplace)}
+          className={`px-3 py-1.5 text-sm rounded transition-colors flex items-center gap-1 ${
+            showFindReplace ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'
+          }`}
+          title="Find & Replace (Ctrl+F)"
+          type="button"
         >
-          <Trash2 className="w-4 h-4" />
+          <Search className="w-4 h-4" />
+          Find
         </button>
-        
-        <div className="relative group">
-          <button
-            className="p-2 hover:bg-secondary rounded text-foreground"
-            title="Export Document"
-          >
-            <FileDown className="w-4 h-4" />
-          </button>
-          <div className="hidden group-hover:block absolute top-full left-0 mt-1 bg-card border border-border rounded shadow-theme-lg py-1 z-30 min-w-[120px]">
-            <button
-              onClick={() => exportDocument('txt')}
-              className="w-full px-4 py-2 text-left text-sm hover:bg-secondary text-foreground"
-            >
-              Export as TXT
-            </button>
-            <button
-              onClick={() => exportDocument('html')}
-              className="w-full px-4 py-2 text-left text-sm hover:bg-secondary text-foreground"
-            >
-              Export as HTML
-            </button>
-          </div>
-        </div>
+
+        <button
+          onClick={() => {
+            const count = getWordCount();
+            alert(`Word Count: ${count}`);
+          }}
+          className="px-3 py-1.5 text-sm hover:bg-secondary rounded text-foreground flex items-center gap-1"
+          title="Word Count"
+          type="button"
+        >
+          <FileType className="w-4 h-4" />
+          Count
+        </button>
+
+        <button
+          onClick={() => {
+            editor.getEditorState().read(() => {
+              const root = $getRoot();
+              const text = root.getTextContent();
+              navigator.clipboard.writeText(text);
+              alert('Text copied to clipboard!');
+            });
+          }}
+          className="px-3 py-1.5 text-sm hover:bg-secondary rounded text-foreground flex items-center gap-1"
+          title="Copy as Plain Text"
+          type="button"
+        >
+          <BookOpen className="w-4 h-4" />
+          Copy
+        </button>
       </div>
 
+      {/* Find & Replace Panel */}
+      {showFindReplace && (
+        <div className="px-4 py-3 bg-secondary/50 border-b border-border flex items-center gap-2 flex-wrap">
+          <input
+            type="text"
+            placeholder="Find..."
+            value={findText}
+            onChange={(e) => setFindText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleFind();
+              }
+            }}
+            className="px-3 py-1.5 text-sm border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary min-w-[200px]"
+          />
+          <input
+            type="text"
+            placeholder="Replace with..."
+            value={replaceText}
+            onChange={(e) => setReplaceText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleReplace();
+              }
+            }}
+            className="px-3 py-1.5 text-sm border border-border rounded focus:outline-none focus:ring-2 focus:ring-primary min-w-[200px]"
+          />
+          <button
+            onClick={handleFind}
+            className="px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90"
+            type="button"
+          >
+            Find
+          </button>
+          <button
+            onClick={handleReplace}
+            className="px-3 py-1.5 text-sm border border-border rounded hover:bg-secondary"
+            type="button"
+          >
+            Replace
+          </button>
+          <button
+            onClick={handleReplaceAll}
+            className="px-3 py-1.5 text-sm border border-border rounded hover:bg-secondary"
+            type="button"
+          >
+            Replace All
+          </button>
+          <button
+            onClick={() => setShowFindReplace(false)}
+            className="px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
+            type="button"
+          >
+            Close
+          </button>
+        </div>
+      )}
+
       {/* Row 2: Text Formatting, Colors, Alignment, Lists */}
-      <div className="px-4 py-2 flex items-center gap-1 overflow-x-auto">
+      <div className="px-4 py-2 flex items-center gap-1 overflow-x-auto flex-wrap">
         {/* Text Formatting */}
         <button
           onClick={() => formatText('bold')}
-          className={`p-2 rounded ${isBold ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
+          className={`p-2 rounded ${isBold ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'}`}
           title="Bold (Ctrl+B)"
+          type="button"
         >
           <Bold className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatText('italic')}
-          className={`p-2 rounded ${isItalic ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
+          className={`p-2 rounded ${isItalic ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'}`}
           title="Italic (Ctrl+I)"
+          type="button"
         >
           <Italic className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatText('underline')}
-          className={`p-2 rounded ${isUnderline ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
+          className={`p-2 rounded ${isUnderline ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'}`}
           title="Underline (Ctrl+U)"
+          type="button"
         >
           <Underline className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatText('strikethrough')}
-          className={`p-2 rounded ${isStrikethrough ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
+          className={`p-2 rounded ${isStrikethrough ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'}`}
           title="Strikethrough"
+          type="button"
         >
           <Strikethrough className="w-4 h-4" />
         </button>
         <button
           onClick={() => formatText('code')}
-          className={`p-2 rounded ${isCode ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
+          className={`p-2 rounded ${isCode ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'}`}
           title="Inline Code"
+          type="button"
         >
           <Code className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => formatText('superscript')}
-          className={`p-2 rounded ${isSuperscript ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
-          title="Superscript"
-        >
-          <Superscript className="w-4 h-4" />
-        </button>
-        <button
-          onClick={() => formatText('subscript')}
-          className={`p-2 rounded ${isSubscript ? 'bg-primary/20 text-primary' : 'hover:bg-secondary'} text-foreground`}
-          title="Subscript"
-        >
-          <Subscript className="w-4 h-4" />
         </button>
 
         <div className="w-px h-6 bg-border mx-2" />
 
-        {/* Text Color */}
-        <div className="relative">
+        {/* Text Colors */}
+        <span className="text-xs text-muted-foreground mr-1">Text:</span>
+        {TEXT_COLORS.map((item) => (
           <button
-            onClick={() => {
-              setShowTextColor(!showTextColor);
-              setShowBgColor(false);
-            }}
-            className="p-2 hover:bg-secondary rounded flex items-center gap-1 text-foreground"
-            title="Text Color"
-          >
-            <Type className="w-4 h-4" />
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {showTextColor && (
-            <div className="absolute top-full left-0 mt-1 p-2 bg-card border border-border rounded-lg shadow-theme-lg z-30">
-              <div className="grid grid-cols-5 gap-1 w-40">
-                {TEXT_COLORS.map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => {
-                      applyStyleText({ color });
-                      setShowTextColor(false);
-                    }}
-                    className="w-7 h-7 rounded border border-border hover:scale-110 transition-transform"
-                    style={{ backgroundColor: color }}
-                    title={color}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+            key={item.color}
+            onClick={() => applyStyleText({ color: item.color })}
+            className="w-6 h-6 rounded border border-border hover:scale-110 transition-transform"
+            style={{ backgroundColor: item.color }}
+            title={`Text ${item.label}`}
+            type="button"
+          />
+        ))}
 
-        {/* Background Color */}
-        <div className="relative">
+        <div className="w-px h-6 bg-border mx-2" />
+
+        {/* Background Colors */}
+        <span className="text-xs text-muted-foreground mr-1">BG:</span>
+        {BACKGROUND_COLORS.map((item) => (
           <button
-            onClick={() => {
-              setShowBgColor(!showBgColor);
-              setShowTextColor(false);
+            key={item.color}
+            onClick={() => applyStyleText({ 'background-color': item.color })}
+            className="w-6 h-6 rounded border border-border hover:scale-110 transition-transform"
+            style={{ 
+              backgroundColor: item.color,
+              backgroundImage: item.color === 'transparent' ? 'linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc), linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc)' : 'none',
+              backgroundSize: item.color === 'transparent' ? '8px 8px' : 'auto',
+              backgroundPosition: item.color === 'transparent' ? '0 0, 4px 4px' : 'initial'
             }}
-            className="p-2 hover:bg-secondary rounded flex items-center gap-1 text-foreground"
-            title="Background Color"
-          >
-            <Palette className="w-4 h-4" />
-            <ChevronDown className="w-3 h-3" />
-          </button>
-          {showBgColor && (
-            <div className="absolute top-full left-0 mt-1 p-2 bg-card border border-border rounded-lg shadow-theme-lg z-30">
-              <div className="grid grid-cols-5 gap-1 w-40">
-                {BACKGROUND_COLORS.map((color) => (
-                  <button
-                    key={color}
-                    onClick={() => {
-                      applyStyleText({ 'background-color': color });
-                      setShowBgColor(false);
-                    }}
-                    className="w-7 h-7 rounded border border-border hover:scale-110 transition-transform"
-                    style={{ backgroundColor: color }}
-                    title={color}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+            title={`Background ${item.label}`}
+            type="button"
+          />
+        ))}
 
         <button
           onClick={clearFormatting}
-          className="p-2 hover:bg-secondary rounded text-foreground"
+          className="p-2 hover:bg-secondary rounded text-foreground ml-2"
           title="Clear Formatting"
+          type="button"
         >
           <RemoveFormatting className="w-4 h-4" />
         </button>
@@ -524,6 +582,7 @@ export default function CompleteToolbar() {
           onClick={() => formatAlignment('left')}
           className="p-2 hover:bg-secondary rounded text-foreground"
           title="Align Left"
+          type="button"
         >
           <AlignLeft className="w-4 h-4" />
         </button>
@@ -531,6 +590,7 @@ export default function CompleteToolbar() {
           onClick={() => formatAlignment('center')}
           className="p-2 hover:bg-secondary rounded text-foreground"
           title="Align Center"
+          type="button"
         >
           <AlignCenter className="w-4 h-4" />
         </button>
@@ -538,6 +598,7 @@ export default function CompleteToolbar() {
           onClick={() => formatAlignment('right')}
           className="p-2 hover:bg-secondary rounded text-foreground"
           title="Align Right"
+          type="button"
         >
           <AlignRight className="w-4 h-4" />
         </button>
@@ -545,6 +606,7 @@ export default function CompleteToolbar() {
           onClick={() => formatAlignment('justify')}
           className="p-2 hover:bg-secondary rounded text-foreground"
           title="Justify"
+          type="button"
         >
           <AlignJustify className="w-4 h-4" />
         </button>
@@ -554,93 +616,50 @@ export default function CompleteToolbar() {
         {/* Lists */}
         <button
           onClick={() => insertList('bullet')}
-          className="p-2 hover:bg-secondary rounded text-foreground"
+          className={`p-2 rounded ${blockType === 'bullet' ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'}`}
           title="Bullet List"
+          type="button"
         >
           <List className="w-4 h-4" />
         </button>
         <button
           onClick={() => insertList('number')}
-          className="p-2 hover:bg-secondary rounded text-foreground"
+          className={`p-2 rounded ${blockType === 'number' ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'}`}
           title="Numbered List"
+          type="button"
         >
           <ListOrdered className="w-4 h-4" />
         </button>
         <button
           onClick={() => insertList('check')}
-          className="p-2 hover:bg-secondary rounded text-foreground"
+          className={`p-2 rounded ${blockType === 'check' ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'}`}
           title="Check List"
+          type="button"
         >
           <CheckSquare className="w-4 h-4" />
         </button>
 
         <div className="w-px h-6 bg-border mx-2" />
 
-        {/* Quote & Code Block */}
+        {/* Quote */}
         <button
           onClick={formatQuote}
-          className="p-2 hover:bg-secondary rounded text-foreground"
+          className={`p-2 rounded ${blockType === 'quote' ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'}`}
           title="Quote Block"
+          type="button"
         >
           <Quote className="w-4 h-4" />
         </button>
+        
+        {/* Code Block */}
         <button
           onClick={formatCodeBlock}
-          className="p-2 hover:bg-secondary rounded text-foreground"
+          className={`p-2 rounded ${blockType === 'code' ? 'bg-primary/20 text-primary' : 'hover:bg-secondary text-foreground'}`}
           title="Code Block"
+          type="button"
         >
           <FileCode className="w-4 h-4" />
         </button>
-
-        <div className="w-px h-6 bg-border mx-2" />
-
-        {/* Horizontal Rule */}
-        <button
-          onClick={insertHorizontalRule}
-          className="p-2 hover:bg-secondary rounded text-foreground"
-          title="Horizontal Line"
-        >
-          <Minus className="w-4 h-4" />
-        </button>
-
-        {/* Link */}
-        <div className="relative">
-          <button
-            onClick={() => setShowLinkInput(!showLinkInput)}
-            className="p-2 hover:bg-secondary rounded text-foreground"
-            title="Insert Link"
-          >
-            <Link2 className="w-4 h-4" />
-          </button>
-          {showLinkInput && (
-            <div className="absolute top-full left-0 mt-1 p-3 bg-card border border-border rounded-lg shadow-theme-lg z-30 w-64">
-              <input
-                type="url"
-                value={linkUrl}
-                onChange={(e) => setLinkUrl(e.target.value)}
-                placeholder="Enter URL..."
-                className="w-full px-3 py-2 text-sm border border-border rounded mb-2 bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={insertLink}
-                  className="flex-1 px-3 py-1.5 bg-primary text-primary-foreground text-sm rounded hover:bg-primary/80"
-                >
-                  Insert
-                </button>
-                <button
-                  onClick={() => {
-                    setShowLinkInput(false);
-                    setLinkUrl('');
-                  }}
-                  className="flex-1 px-3 py-1.5 bg-secondary text-secondary-foreground text-sm rounded hover:bg-secondary/80"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

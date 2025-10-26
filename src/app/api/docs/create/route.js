@@ -1,133 +1,121 @@
+// ============================================
+// app/api/docs/create/route.js
+// Creates Google Doc AND saves metadata to Firestore
+// Handles folder structure in Google Drive
+// ============================================
 import { NextResponse } from 'next/server';
+import firestoreService from '@/services';
 import googleDocsService from '@/lib/googleDocsService';
-import { auth } from '@/config/firebase-admin';
 
 export async function POST(request) {
-    console.log('=== API /docs/create called ===');
+    console.log('📄 Creating Google Doc with Firestore metadata...');
     
     try {
-        // Verify authentication
-        const authHeader = request.headers.get('Authorization');
-        console.log('Auth header present:', !!authHeader);
-        
-        if (!authHeader?.startsWith('Bearer ')) {
-            console.error('Missing or invalid authorization header');
+        const { suiteId, sprintId, documentData, content, suiteName } = await request.json();
+
+        // Validation
+        if (!suiteId || !documentData?.title) {
             return NextResponse.json(
-                { success: false, error: 'Unauthorized - Missing Bearer token' }, 
-                { status: 401 }
-            );
-        }
-
-        const token = authHeader.substring(7);
-        console.log('Verifying ID token...');
-        
-        let decodedToken;
-        try {
-            decodedToken = await auth.verifyIdToken(token);
-            console.log('Token verified for user:', decodedToken.uid);
-        } catch (verifyError) {
-            console.error('Token verification failed:', verifyError);
-            return NextResponse.json(
-                { success: false, error: 'Unauthorized - Invalid token' }, 
-                { status: 401 }
-            );
-        }
-
-        // Parse request body
-        const body = await request.json();
-        console.log('Request body:', {
-            hasTitle: !!body.title,
-            hasSuiteId: !!body.suiteId,
-            hasSuiteName: !!body.suiteName,
-            hasSprintId: !!body.sprintId,
-            hasContent: !!body.content
-        });
-
-        const { title, suiteId, suiteName, sprintId, content } = body;
-
-        if (!title || !suiteId) {
-            console.error('Missing required fields');
-            return NextResponse.json(
-                { success: false, error: 'Title and Suite ID are required' },
+                { success: false, error: { message: 'Suite ID and title required' } },
                 { status: 400 }
             );
         }
 
-        // Determine target folder
+        console.log('Creating Google Doc:', documentData.title);
+
+        // Step 1: Setup folder structure in Google Drive
         let targetFolderId = process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID;
         
-        console.log('🔍 Environment check:');
-        console.log('   - GOOGLE_DRIVE_ROOT_FOLDER_ID:', targetFolderId);
-        console.log('   - Will use folder:', !!targetFolderId);
-        
-        // Create folder structure if no root folder specified
-        if (!targetFolderId) {
-            console.log('No root folder specified, creating folder structure...');
+        if (targetFolderId) {
             try {
-                const rootFolderId = await googleDocsService.getOrCreateFolder('QA Test Suites');
-                console.log('Root folder ID:', rootFolderId);
-                
+                // Create suite folder
+                const suiteFolderName = suiteName || `Suite_${suiteId}`;
                 targetFolderId = await googleDocsService.getOrCreateFolder(
-                    suiteName || suiteId, 
-                    rootFolderId
+                    suiteFolderName,
+                    targetFolderId
                 );
-                console.log('Suite folder ID:', targetFolderId);
                 
+                // Create sprint subfolder if needed
                 if (sprintId) {
                     targetFolderId = await googleDocsService.getOrCreateFolder(
-                        `Sprint ${sprintId}`, 
+                        `Sprint_${sprintId}`,
                         targetFolderId
                     );
-                    console.log('Sprint folder ID:', targetFolderId);
                 }
+                
+                console.log('✅ Folder structure ready:', targetFolderId);
             } catch (folderError) {
-                console.warn('Failed to create folder structure:', folderError);
-                // Continue without folder organization
-                targetFolderId = null;
+                console.warn('⚠️ Folder creation failed, using root:', folderError.message);
             }
-        } else {
-            console.log('Using root folder from env:', targetFolderId);
         }
 
-        // Create the Google Doc
-        console.log('Creating Google Doc...');
-        const docResult = await googleDocsService.createDocument(
-            title, 
-            content || '', 
+        // Step 2: Create Google Doc
+        const googleDoc = await googleDocsService.createDocument(
+            documentData.title,
+            content || '',
             targetFolderId
         );
-        console.log('Google Doc created:', {
-            docId: docResult.docId,
-            url: docResult.url
-        });
 
-        // Return success response
-        const response = {
-            success: true,
-            docId: docResult.docId,
-            url: docResult.url,
-            title: docResult.title,
-            folderId: targetFolderId,
-            createdAt: docResult.createdAt
+        console.log('✅ Google Doc created:', googleDoc.docId);
+
+        // Step 3: Save metadata to Firestore (NO CONTENT STORED)
+        const firestoreData = {
+            title: documentData.title,
+            type: documentData.type || 'general',
+            tags: documentData.tags || [],
+            metadata: {
+                ...(documentData.metadata || {}),
+                status: documentData.metadata?.status || 'draft',
+                version: documentData.metadata?.version || '1.0'
+            },
+            googleDoc: {
+                docId: googleDoc.docId,
+                url: googleDoc.url,
+                folderId: targetFolderId
+            },
+            url: googleDoc.url
         };
-        
-        console.log('Returning success response:', response);
-        return NextResponse.json(response);
+
+        // Firebase Security Rules handle all auth & permissions
+        const result = await firestoreService.createDocument(
+            suiteId,
+            firestoreData,
+            sprintId
+        );
+
+        if (!result.success) {
+            // Cleanup: delete Google Doc if Firestore fails
+            console.log('🗑️ Cleaning up Google Doc after Firestore error');
+            try {
+                await googleDocsService.deleteDocument(googleDoc.docId);
+            } catch (cleanupErr) {
+                console.error('Cleanup failed:', cleanupErr);
+            }
+            
+            throw new Error(result.error?.message || 'Firestore save failed');
+        }
+
+        console.log('✅ Google Doc + Firestore metadata created successfully');
+
+        return NextResponse.json({
+            success: true,
+            data: {
+                id: result.data?.id,
+                ...firestoreData,
+                createdAt: new Date().toISOString()
+            }
+        }, { status: 201 });
 
     } catch (error) {
-        console.error('=== API /docs/create error ===');
-        console.error('Error details:', {
-            message: error.message,
-            stack: error.stack,
-            code: error.code
-        });
+        console.error('❌ Google Doc creation failed:', error);
         
         return NextResponse.json(
             { 
                 success: false, 
-                error: error.message,
-                details: error.stack 
-            }, 
+                error: { 
+                    message: error.message || 'Failed to create Google Doc' 
+                } 
+            },
             { status: 500 }
         );
     }

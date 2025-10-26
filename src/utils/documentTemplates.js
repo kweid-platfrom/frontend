@@ -1,13 +1,28 @@
-
 // documentTemplates.js
 
+export const DOCUMENT_TYPES = {
+  GENERAL: 'general',
+  TEST_PLAN: 'test-plan',
+  TEST_STRATEGY: 'test-strategy',
+  REQUIREMENT: 'requirement',
+  SPECIFICATION: 'specification',
+  NOTES: 'notes',
+  TEST_REPORT: 'test-report',
+  BUG_ANALYSIS: 'bug-analysis'
+};
+
 export const documentTemplates = {
-  'general': {
+  [DOCUMENT_TYPES.GENERAL]: {
     title: 'Untitled Document',
-    html: '<p><br></p>'
+    html: '<p><br></p>',
+    metadata: {
+      linkedTestRuns: [],
+      linkedTestCases: [],
+      linkedBugs: []
+    }
   },
   
-  'test-plan': {
+  [DOCUMENT_TYPES.TEST_PLAN]: {
     title: 'Test Plan',
     html: `
       <h1>Test Plan</h1>
@@ -19,6 +34,7 @@ export const documentTemplates = {
       <p><strong>Sprint/Release:</strong> </p>
       <p><strong>Test Lead:</strong> </p>
       <p><strong>Testing Period:</strong> </p>
+      <p><strong>Status:</strong> <span class="status-badge" data-status="draft">Draft</span></p>
       <p><br></p>
       
       <h2>2. Scope</h2>
@@ -65,12 +81,6 @@ export const documentTemplates = {
             <td>Automated suite</td>
             <td></td>
           </tr>
-          <tr>
-            <td>Integration Testing</td>
-            <td>Key workflows</td>
-            <td>Manual</td>
-            <td></td>
-          </tr>
         </tbody>
       </table>
       <p><br></p>
@@ -95,7 +105,7 @@ export const documentTemplates = {
       <ul>
         <li>☐ 100% test cases executed</li>
         <li>☐ No critical/high severity bugs open</li>
-        <li>☐ Test coverage &gt;= 90%</li>
+        <li>☐ Test coverage >= 90%</li>
         <li>☐ Sign-off from stakeholders</li>
       </ul>
       <p><br></p>
@@ -129,23 +139,17 @@ export const documentTemplates = {
             <td></td>
             <td>Not Started</td>
           </tr>
-          <tr>
-            <td>Bug Fixing & Retesting</td>
-            <td></td>
-            <td></td>
-            <td>Not Started</td>
-          </tr>
-          <tr>
-            <td>Final Sign-off</td>
-            <td></td>
-            <td></td>
-            <td>Not Started</td>
-          </tr>
         </tbody>
       </table>
       <p><br></p>
       
-      <h2>7. Risks & Mitigation</h2>
+      <h2>7. Test Run Linkage</h2>
+      <div class="test-run-links" data-type="test-runs">
+        <p><em>No test runs linked yet. Link test runs to track execution against this plan.</em></p>
+      </div>
+      <p><br></p>
+      
+      <h2>8. Risks & Mitigation</h2>
       <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr style="background-color: #f3f4f6;">
@@ -165,50 +169,25 @@ export const documentTemplates = {
             <td>Medium</td>
             <td>Cross-training team members</td>
           </tr>
-          <tr>
-            <td>Late feature delivery</td>
-            <td>High</td>
-            <td>Prioritize critical features first</td>
-          </tr>
         </tbody>
       </table>
-      <p><br></p>
-      
-      <h2>8. Team & Responsibilities</h2>
-      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="text-align: left;">Name</th>
-            <th style="text-align: left;">Role</th>
-            <th style="text-align: left;">Responsibility</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td></td>
-            <td>Test Lead</td>
-            <td>Overall test coordination</td>
-          </tr>
-          <tr>
-            <td></td>
-            <td>QA Engineer</td>
-            <td>Test execution</td>
-          </tr>
-          <tr>
-            <td></td>
-            <td>Automation Engineer</td>
-            <td>Script development</td>
-          </tr>
-        </tbody>
-      </table>
-    `
+    `,
+    metadata: {
+      linkedTestRuns: [],
+      linkedTestCases: [],
+      linkedBugs: [],
+      status: 'draft',
+      approvers: [],
+      testLead: null
+    }
   },
 
-  'test-strategy': {
+  [DOCUMENT_TYPES.TEST_STRATEGY]: {
     title: 'Test Strategy',
     html: `
       <h1>Test Strategy Document</h1>
       <p><em>Project Name | ${new Date().toLocaleDateString()}</em></p>
+      <p><strong>Status:</strong> <span class="status-badge" data-status="draft">Draft</span></p>
       <p><br></p>
       
       <h2>1. Executive Summary</h2>
@@ -250,7 +229,6 @@ export const documentTemplates = {
       <p><br></p>
       
       <h2>3. Test Types & Coverage</h2>
-      
       <h3>Functional Testing</h3>
       <ul>
         <li><strong>Scope:</strong> Verify all user stories and acceptance criteria</li>
@@ -270,7 +248,7 @@ export const documentTemplates = {
         <tbody>
           <tr>
             <td>Performance Testing</td>
-            <td>Load time &lt; 2s, Handle 1000 concurrent users</td>
+            <td>Load time < 2s, Handle 1000 concurrent users</td>
             <td>JMeter, LoadRunner</td>
           </tr>
           <tr>
@@ -283,11 +261,6 @@ export const documentTemplates = {
             <td>User experience, Accessibility (WCAG 2.1)</td>
             <td>Manual, User feedback</td>
           </tr>
-          <tr>
-            <td>Compatibility Testing</td>
-            <td>Browsers, Devices, OS</td>
-            <td>BrowserStack, Sauce Labs</td>
-          </tr>
         </tbody>
       </table>
       <p><br></p>
@@ -299,15 +272,49 @@ export const documentTemplates = {
         <li>Reduce manual testing effort by 60%</li>
         <li>Enable continuous testing in CI/CD pipeline</li>
       </ul>
-      
-      <h3>Framework & Tools</h3>
-      <p><strong>UI Automation:</strong> Selenium WebDriver + TestNG</p>
-      <p><strong>API Automation:</strong> RestAssured + Postman</p>
-      <p><strong>Mobile Automation:</strong> Appium</p>
-      <p><strong>CI/CD Integration:</strong> Jenkins, GitHub Actions</p>
       <p><br></p>
       
-      <h2>5. Defect Management</h2>
+      <h2>5. Quality Metrics</h2>
+      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background-color: #f3f4f6;">
+            <th style="text-align: left;">Metric</th>
+            <th style="text-align: left;">Target</th>
+            <th style="text-align: left;">Current</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Test Coverage</td>
+            <td>>= 90%</td>
+            <td><span class="metric-value" data-metric="coverage">--</span></td>
+          </tr>
+          <tr>
+            <td>Defect Density</td>
+            <td>< 10 defects per feature</td>
+            <td><span class="metric-value" data-metric="defect-density">--</span></td>
+          </tr>
+          <tr>
+            <td>Test Pass Rate</td>
+            <td>>= 95%</td>
+            <td><span class="metric-value" data-metric="pass-rate">--</span></td>
+          </tr>
+          <tr>
+            <td>Automation Coverage</td>
+            <td>>= 80%</td>
+            <td><span class="metric-value" data-metric="automation">--</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <p><br></p>
+      
+      <h2>6. Linked Test Plans</h2>
+      <div class="test-plan-links" data-type="test-plans">
+        <p><em>No test plans linked yet. Link test plans that implement this strategy.</em></p>
+      </div>
+      <p><br></p>
+      
+      <h2>7. Defect Management</h2>
       <h3>Severity Levels</h3>
       <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
         <thead>
@@ -340,95 +347,147 @@ export const documentTemplates = {
           </tr>
         </tbody>
       </table>
-      
-      <h3>Bug Workflow</h3>
-      <p>New → Assigned → In Progress → Fixed → Ready for Testing → Verified → Closed</p>
+    `,
+    metadata: {
+      linkedTestPlans: [],
+      linkedTestRuns: [],
+      status: 'draft',
+      approvers: [],
+      version: '1.0'
+    }
+  },
+
+  [DOCUMENT_TYPES.TEST_REPORT]: {
+    title: 'Test Execution Report',
+    html: `
+      <h1>Test Execution Report</h1>
+      <p><em>Generated: ${new Date().toLocaleDateString()}</em></p>
       <p><br></p>
       
-      <h2>6. Quality Metrics</h2>
+      <h2>1. Executive Summary</h2>
+      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        <tbody>
+          <tr>
+            <td style="background-color: #f3f4f6; font-weight: bold; width: 30%;">Test Run ID</td>
+            <td><span class="dynamic-field" data-field="testRunId">--</span></td>
+          </tr>
+          <tr>
+            <td style="background-color: #f3f4f6; font-weight: bold;">Test Plan</td>
+            <td><span class="dynamic-field" data-field="testPlanName">--</span></td>
+          </tr>
+          <tr>
+            <td style="background-color: #f3f4f6; font-weight: bold;">Execution Period</td>
+            <td><span class="dynamic-field" data-field="executionPeriod">--</span></td>
+          </tr>
+          <tr>
+            <td style="background-color: #f3f4f6; font-weight: bold;">Status</td>
+            <td><span class="dynamic-field status-badge" data-field="status">--</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <p><br></p>
+      
+      <h2>2. Test Execution Summary</h2>
       <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr style="background-color: #f3f4f6;">
             <th style="text-align: left;">Metric</th>
-            <th style="text-align: left;">Target</th>
-            <th style="text-align: left;">Measurement</th>
+            <th style="text-align: center;">Count</th>
+            <th style="text-align: center;">Percentage</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td>Test Coverage</td>
-            <td>&gt;= 90%</td>
-            <td>Requirements traced to tests</td>
+            <td>Total Test Cases</td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="totalTests">0</span></td>
+            <td style="text-align: center;">100%</td>
           </tr>
           <tr>
-            <td>Defect Density</td>
-            <td>&lt; 10 defects per feature</td>
-            <td>Total defects / Features</td>
+            <td>Passed</td>
+            <td style="text-align: center; color: #10b981;"><span class="dynamic-field" data-field="passedTests">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="passPercentage">0%</span></td>
           </tr>
           <tr>
-            <td>Test Pass Rate</td>
-            <td>&gt;= 95%</td>
-            <td>Passed tests / Total tests</td>
+            <td>Failed</td>
+            <td style="text-align: center; color: #ef4444;"><span class="dynamic-field" data-field="failedTests">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="failPercentage">0%</span></td>
           </tr>
           <tr>
-            <td>Automation Coverage</td>
-            <td>&gt;= 80%</td>
-            <td>Automated tests / Total tests</td>
+            <td>Blocked</td>
+            <td style="text-align: center; color: #f59e0b;"><span class="dynamic-field" data-field="blockedTests">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="blockedPercentage">0%</span></td>
           </tr>
           <tr>
-            <td>Defect Leakage</td>
-            <td>&lt; 5%</td>
-            <td>Production bugs / Total bugs</td>
+            <td>Not Executed</td>
+            <td style="text-align: center; color: #6b7280;"><span class="dynamic-field" data-field="notExecutedTests">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="notExecutedPercentage">0%</span></td>
           </tr>
         </tbody>
       </table>
       <p><br></p>
       
-      <h2>7. Test Environment Strategy</h2>
+      <h2>3. Defects Summary</h2>
       <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr style="background-color: #f3f4f6;">
-            <th style="text-align: left;">Environment</th>
-            <th style="text-align: left;">Purpose</th>
-            <th style="text-align: left;">Access</th>
+            <th style="text-align: left;">Severity</th>
+            <th style="text-align: center;">Open</th>
+            <th style="text-align: center;">Fixed</th>
+            <th style="text-align: center;">Total</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td>DEV</td>
-            <td>Development and unit testing</td>
-            <td>Developers</td>
+            <td>Critical</td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="criticalOpen">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="criticalFixed">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="criticalTotal">0</span></td>
           </tr>
           <tr>
-            <td>QA</td>
-            <td>Functional and integration testing</td>
-            <td>QA Team</td>
+            <td>High</td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="highOpen">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="highFixed">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="highTotal">0</span></td>
           </tr>
           <tr>
-            <td>UAT</td>
-            <td>User acceptance testing</td>
-            <td>Business Users</td>
+            <td>Medium</td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="mediumOpen">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="mediumFixed">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="mediumTotal">0</span></td>
           </tr>
           <tr>
-            <td>STAGING</td>
-            <td>Pre-production validation</td>
-            <td>QA + Business</td>
+            <td>Low</td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="lowOpen">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="lowFixed">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="lowTotal">0</span></td>
           </tr>
         </tbody>
       </table>
       <p><br></p>
       
-      <h2>8. Communication & Reporting</h2>
+      <h2>4. Test Environment</h2>
+      <p><strong>Environment:</strong> <span class="dynamic-field" data-field="environment">--</span></p>
+      <p><strong>Build Version:</strong> <span class="dynamic-field" data-field="buildVersion">--</span></p>
+      <p><strong>Test Data Set:</strong> <span class="dynamic-field" data-field="testDataSet">--</span></p>
+      <p><br></p>
+      
+      <h2>5. Recommendations</h2>
       <ul>
-        <li><strong>Daily Standup:</strong> Test progress, blockers</li>
-        <li><strong>Weekly Report:</strong> Test metrics, risk status</li>
-        <li><strong>Sprint Review:</strong> Demo tested features</li>
-        <li><strong>Release Report:</strong> Final quality sign-off</li>
+        <li>Address all critical and high severity defects before release</li>
+        <li>Review failed test cases and update where necessary</li>
+        <li>Ensure blocked tests are unblocked and executed</li>
       </ul>
-    `
+    `,
+    metadata: {
+      linkedTestRun: null,
+      linkedTestPlan: null,
+      linkedBugs: [],
+      generatedAt: new Date().toISOString(),
+      metrics: {}
+    }
   },
 
-  'requirement': {
+  [DOCUMENT_TYPES.REQUIREMENT]: {
     title: 'Requirements Document',
     html: `
       <h1>Requirements Document</h1>
@@ -436,34 +495,11 @@ export const documentTemplates = {
       <p><br></p>
       
       <h2>1. Document Overview</h2>
-      <p><strong>Purpose:</strong> This document describes the functional and non-functional requirements for [Project Name].</p>
-      <p><strong>Audience:</strong> Development Team, QA Team, Product Managers, Stakeholders</p>
-      <p><strong>Scope:</strong> </p>
+      <p><strong>Purpose:</strong> This document describes the functional and non-functional requirements.</p>
+      <p><strong>Status:</strong> <span class="status-badge" data-status="draft">Draft</span></p>
       <p><br></p>
       
-      <h2>2. Business Requirements</h2>
-      <h3>2.1 Business Objectives</h3>
-      <ul>
-        <li>Objective 1: </li>
-        <li>Objective 2: </li>
-        <li>Objective 3: </li>
-      </ul>
-      
-      <h3>2.2 Success Criteria</h3>
-      <ul>
-        <li>Metric 1: </li>
-        <li>Metric 2: </li>
-        <li>Metric 3: </li>
-      </ul>
-      <p><br></p>
-      
-      <h2>3. Functional Requirements</h2>
-      
-      <h3>Feature 1: [Feature Name]</h3>
-      <p><strong>Description:</strong> </p>
-      <p><strong>User Story:</strong> As a [user type], I want to [action] so that [benefit]</p>
-      
-      <h4>Requirements</h4>
+      <h2>2. Functional Requirements</h2>
       <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
         <thead>
           <tr style="background-color: #f3f4f6;">
@@ -486,633 +522,196 @@ export const documentTemplates = {
             <td>High</td>
             <td>Draft</td>
           </tr>
-          <tr>
-            <td>REQ-003</td>
-            <td>System shall display...</td>
-            <td>Medium</td>
-            <td>Draft</td>
-          </tr>
-        </tbody>
-      </table>
-      
-      <h4>Acceptance Criteria</h4>
-      <ul>
-        <li>☐ Given [context], when [action], then [expected result]</li>
-        <li>☐ Given [context], when [action], then [expected result]</li>
-        <li>☐ Given [context], when [action], then [expected result]</li>
-      </ul>
-      <p><br></p>
-      
-      <h3>Feature 2: [Feature Name]</h3>
-      <p><strong>Description:</strong> </p>
-      <p><strong>User Story:</strong> As a [user type], I want to [action] so that [benefit]</p>
-      
-      <h4>Requirements</h4>
-      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="text-align: left; width: 15%;">ID</th>
-            <th style="text-align: left; width: 50%;">Requirement</th>
-            <th style="text-align: left; width: 15%;">Priority</th>
-            <th style="text-align: left; width: 20%;">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>REQ-004</td>
-            <td></td>
-            <td>High</td>
-            <td>Draft</td>
-          </tr>
-          <tr>
-            <td>REQ-005</td>
-            <td></td>
-            <td>Medium</td>
-            <td>Draft</td>
-          </tr>
         </tbody>
       </table>
       <p><br></p>
       
-      <h2>4. Non-Functional Requirements</h2>
-      
-      <h3>4.1 Performance</h3>
-      <ul>
-        <li>Page load time: &lt; 2 seconds</li>
-        <li>API response time: &lt; 500ms</li>
-        <li>Support 10,000 concurrent users</li>
-      </ul>
-      
-      <h3>4.2 Security</h3>
-      <ul>
-        <li>Authentication: OAuth 2.0 / JWT</li>
-        <li>Data encryption: AES-256 for sensitive data</li>
-        <li>Compliance: GDPR, SOC 2</li>
-      </ul>
-      
-      <h3>4.3 Usability</h3>
-      <ul>
-        <li>Accessibility: WCAG 2.1 Level AA compliance</li>
-        <li>Mobile responsive design</li>
-        <li>Browser support: Chrome, Firefox, Safari, Edge (latest 2 versions)</li>
-      </ul>
-      
-      <h3>4.4 Reliability</h3>
-      <ul>
-        <li>Uptime: 99.9% availability</li>
-        <li>Error rate: &lt; 0.1%</li>
-        <li>Data backup: Daily automated backups</li>
-      </ul>
-      <p><br></p>
-      
-      <h2>5. User Interface Requirements</h2>
-      <p><strong>Design System:</strong> </p>
-      <p><strong>Key Screens:</strong> </p>
-      <ul>
-        <li>Screen 1: </li>
-        <li>Screen 2: </li>
-        <li>Screen 3: </li>
-      </ul>
-      <p><br></p>
-      
-      <h2>6. Integration Requirements</h2>
-      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="text-align: left;">System</th>
-            <th style="text-align: left;">Integration Type</th>
-            <th style="text-align: left;">Purpose</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Payment Gateway</td>
-            <td>API</td>
-            <td>Process payments</td>
-          </tr>
-          <tr>
-            <td>Email Service</td>
-            <td>API</td>
-            <td>Send notifications</td>
-          </tr>
-          <tr>
-            <td>Analytics</td>
-            <td>SDK</td>
-            <td>Track user behavior</td>
-          </tr>
-        </tbody>
-      </table>
-      <p><br></p>
-      
-      <h2>7. Assumptions & Constraints</h2>
-      <h3>Assumptions</h3>
-      <ul>
-        <li>Users have stable internet connection</li>
-        <li>Third-party APIs are available 99.5% of the time</li>
-      </ul>
-      
-      <h3>Constraints</h3>
-      <ul>
-        <li>Budget: </li>
-        <li>Timeline: </li>
-        <li>Technology: </li>
-      </ul>
-      <p><br></p>
-      
-      <h2>8. Dependencies</h2>
-      <ul>
-        <li>Dependency 1: </li>
-        <li>Dependency 2: </li>
-      </ul>
-      <p><br></p>
-      
-      <h2>9. Approval & Sign-off</h2>
-      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="text-align: left;">Name</th>
-            <th style="text-align: left;">Role</th>
-            <th style="text-align: left;">Date</th>
-            <th style="text-align: left;">Signature</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td></td>
-            <td>Product Manager</td>
-            <td></td>
-            <td></td>
-          </tr>
-          <tr>
-            <td></td>
-            <td>Tech Lead</td>
-            <td></td>
-            <td></td>
-          </tr>
-          <tr>
-            <td></td>
-            <td>Stakeholder</td>
-            <td></td>
-            <td></td>
-          </tr>
-        </tbody>
-      </table>
-    `
+      <h2>3. Test Coverage</h2>
+      <div class="test-case-links" data-type="test-cases">
+        <p><em>No test cases linked yet. Link test cases that validate these requirements.</em></p>
+      </div>
+    `,
+    metadata: {
+      linkedTestCases: [],
+      linkedTestPlans: [],
+      status: 'draft',
+      version: '1.0'
+    }
   },
 
-  'specification': {
+  [DOCUMENT_TYPES.SPECIFICATION]: {
     title: 'Technical Specification',
     html: `
       <h1>Technical Specification</h1>
-      <p><em>Project: [Project Name] | Version 1.0 | ${new Date().toLocaleDateString()}</em></p>
+      <p><em>Project: [Project Name] | ${new Date().toLocaleDateString()}</em></p>
       <p><br></p>
       
       <h2>1. System Overview</h2>
       <p><strong>Purpose:</strong> </p>
       <p><strong>Scope:</strong> </p>
-      <p><strong>Tech Stack:</strong> </p>
       <p><br></p>
       
       <h2>2. Architecture</h2>
-      <h3>2.1 High-Level Architecture</h3>
-      <p>[Describe the overall system architecture - microservices, monolith, serverless, etc.]</p>
-      
-      <h3>2.2 Technology Stack</h3>
-      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="text-align: left;">Layer</th>
-            <th style="text-align: left;">Technology</th>
-            <th style="text-align: left;">Version</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Frontend</td>
-            <td>React / Vue / Angular</td>
-            <td></td>
-          </tr>
-          <tr>
-            <td>Backend</td>
-            <td>Node.js / Java / Python</td>
-            <td></td>
-          </tr>
-          <tr>
-            <td>Database</td>
-            <td>PostgreSQL / MongoDB</td>
-            <td></td>
-          </tr>
-          <tr>
-            <td>Cache</td>
-            <td>Redis</td>
-            <td></td>
-          </tr>
-          <tr>
-            <td>Cloud</td>
-            <td>AWS / Azure / GCP</td>
-            <td></td>
-          </tr>
-        </tbody>
-      </table>
+      <p>[Describe system architecture]</p>
       <p><br></p>
       
-      <h2>3. System Components</h2>
-      
-      <h3>Component 1: [Component Name]</h3>
-      <p><strong>Purpose:</strong> </p>
-      <p><strong>Technology:</strong> </p>
-      <p><strong>Key Functionality:</strong></p>
-      <ul>
-        <li>Function 1</li>
-        <li>Function 2</li>
-        <li>Function 3</li>
-      </ul>
-      
-      <h3>Component 2: [Component Name]</h3>
-      <p><strong>Purpose:</strong> </p>
-      <p><strong>Technology:</strong> </p>
-      <p><strong>Key Functionality:</strong></p>
-      <ul>
-        <li>Function 1</li>
-        <li>Function 2</li>
-      </ul>
+      <h2>3. API Specifications</h2>
+      <p>[API details]</p>
       <p><br></p>
       
-      <h2>4. API Specifications</h2>
-      
-      <h3>Endpoint 1: Create User</h3>
-      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <tbody>
-          <tr>
-            <td style="background-color: #f3f4f6; font-weight: bold; width: 20%;">Method</td>
-            <td>POST</td>
-          </tr>
-          <tr>
-            <td style="background-color: #f3f4f6; font-weight: bold;">Endpoint</td>
-            <td>/api/users</td>
-          </tr>
-          <tr>
-            <td style="background-color: #f3f4f6; font-weight: bold;">Authentication</td>
-            <td>Required (Bearer Token)</td>
-          </tr>
-          <tr>
-            <td style="background-color: #f3f4f6; font-weight: bold;">Request Body</td>
-            <td>{ "name": "string", "email": "string", "role": "string" }</td>
-          </tr>
-          <tr>
-            <td style="background-color: #f3f4f6; font-weight: bold;">Response (200)</td>
-            <td>{ "id": "string", "name": "string", "email": "string", "createdAt": "timestamp" }</td>
-          </tr>
-          <tr>
-            <td style="background-color: #f3f4f6; font-weight: bold;">Error Codes</td>
-            <td>400: Bad Request, 401: Unauthorized, 409: User already exists</td>
-          </tr>
-        </tbody>
-      </table>
-      <p><br></p>
-      
-      <h3>Endpoint 2: Get User</h3>
-      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <tbody>
-          <tr>
-            <td style="background-color: #f3f4f6; font-weight: bold; width: 20%;">Method</td>
-            <td>GET</td>
-          </tr>
-          <tr>
-            <td style="background-color: #f3f4f6; font-weight: bold;">Endpoint</td>
-            <td>/api/users/:id</td>
-          </tr>
-          <tr>
-            <td style="background-color: #f3f4f6; font-weight: bold;">Authentication</td>
-            <td>Required (Bearer Token)</td>
-          </tr>
-          <tr>
-            <td style="background-color: #f3f4f6; font-weight: bold;">Parameters</td>
-            <td>id (path parameter): User ID</td>
-          </tr>
-          <tr>
-            <td style="background-color: #f3f4f6; font-weight: bold;">Response (200)</td>
-            <td>{ "id": "string", "name": "string", "email": "string", "role": "string" }</td>
-          </tr>
-        </tbody>
-      </table>
-      <p><br></p>
-      
-      <h2>5. Database Schema</h2>
-      
-      <h3>Users Table</h3>
-      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="text-align: left;">Column</th>
-            <th style="text-align: left;">Type</th>
-            <th style="text-align: left;">Constraints</th>
-            <th style="text-align: left;">Description</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>id</td>
-            <td>UUID</td>
-            <td>PRIMARY KEY</td>
-            <td>Unique identifier</td>
-          </tr>
-          <tr>
-            <td>email</td>
-            <td>VARCHAR(255)</td>
-            <td>UNIQUE, NOT NULL</td>
-            <td>User email</td>
-          </tr>
-          <tr>
-            <td>name</td>
-            <td>VARCHAR(100)</td>
-            <td>NOT NULL</td>
-            <td>User name</td>
-          </tr>
-          <tr>
-            <td>password_hash</td>
-            <td>VARCHAR(255)</td>
-            <td>NOT NULL</td>
-            <td>Hashed password</td>
-          </tr>
-          <tr>
-            <td>created_at</td>
-            <td>TIMESTAMP</td>
-            <td>DEFAULT NOW()</td>
-            <td>Creation timestamp</td>
-          </tr>
-          <tr>
-            <td>updated_at</td>
-            <td>TIMESTAMP</td>
-            <td>DEFAULT NOW()</td>
-            <td>Last update timestamp</td>
-          </tr>
-        </tbody>
-      </table>
-      <p><br></p>
-      
-      <h2>6. Security Implementation</h2>
-      
-      <h3>Authentication</h3>
-      <ul>
-        <li><strong>Method:</strong> JWT (JSON Web Tokens)</li>
-        <li><strong>Token Expiry:</strong> 24 hours</li>
-        <li><strong>Refresh Token:</strong> 7 days</li>
-      </ul>
-      
-      <h3>Authorization</h3>
-      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="text-align: left;">Role</th>
-            <th style="text-align: left;">Permissions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Admin</td>
-            <td>Full access to all resources</td>
-          </tr>
-          <tr>
-            <td>User</td>
-            <td>Read/Write own resources</td>
-          </tr>
-          <tr>
-            <td>Guest</td>
-            <td>Read-only access</td>
-          </tr>
-        </tbody>
-      </table>
-      
-      <h3>Data Protection</h3>
-      <ul>
-        <li>Passwords: bcrypt hashing (salt rounds: 12)</li>
-        <li>Sensitive data: AES-256 encryption</li>
-        <li>HTTPS: TLS 1.3 for all communications</li>
-      </ul>
-      <p><br></p>
-      
-      <h2>7. Error Handling</h2>
-      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="text-align: left;">Error Code</th>
-            <th style="text-align: left;">Description</th>
-            <th style="text-align: left;">Response Format</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>400</td>
-            <td>Bad Request</td>
-            <td>{ "error": "Invalid input", "details": [] }</td>
-          </tr>
-          <tr>
-            <td>401</td>
-            <td>Unauthorized</td>
-            <td>{ "error": "Authentication required" }</td>
-          </tr>
-          <tr>
-            <td>403</td>
-            <td>Forbidden</td>
-            <td>{ "error": "Insufficient permissions" }</td>
-          </tr>
-          <tr>
-            <td>404</td>
-            <td>Not Found</td>
-            <td>{ "error": "Resource not found" }</td>
-          </tr>
-          <tr>
-            <td>500</td>
-            <td>Internal Server Error</td>
-            <td>{ "error": "Internal server error", "requestId": "string" }</td>
-          </tr>
-        </tbody>
-      </table>
-      <p><br></p>
-      
-      <h2>8. Performance Requirements</h2>
-      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="text-align: left;">Metric</th>
-            <th style="text-align: left;">Target</th>
-            <th style="text-align: left;">Measurement Method</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>API Response Time</td>
-            <td>&lt; 200ms (P95)</td>
-            <td>APM monitoring</td>
-          </tr>
-          <tr>
-            <td>Database Query Time</td>
-            <td>&lt; 50ms (P95)</td>
-            <td>Query profiling</td>
-          </tr>
-          <tr>
-            <td>Concurrent Users</td>
-            <td>10,000</td>
-            <td>Load testing</td>
-          </tr>
-          <tr>
-            <td>Throughput</td>
-            <td>1,000 req/sec</td>
-            <td>Performance testing</td>
-          </tr>
-        </tbody>
-      </table>
-      <p><br></p>
-      
-      <h2>9. Deployment Strategy</h2>
-      <h3>Environments</h3>
-      <ul>
-        <li><strong>Development:</strong> dev.example.com</li>
-        <li><strong>Staging:</strong> staging.example.com</li>
-        <li><strong>Production:</strong> app.example.com</li>
-      </ul>
-      
-      <h3>CI/CD Pipeline</h3>
-      <ol>
-        <li>Code commit triggers build</li>
-        <li>Run unit tests</li>
-        <li>Run integration tests</li>
-        <li>Build Docker image</li>
-        <li>Deploy to staging</li>
-        <li>Run smoke tests</li>
-        <li>Manual approval for production</li>
-        <li>Deploy to production (blue-green deployment)</li>
-      </ol>
-      <p><br></p>
-      
-      <h2>10. Monitoring & Logging</h2>
-      <h3>Monitoring Tools</h3>
-      <ul>
-        <li><strong>APM:</strong> New Relic / DataDog</li>
-        <li><strong>Logging:</strong> ELK Stack / CloudWatch</li>
-        <li><strong>Uptime:</strong> Pingdom / UptimeRobot</li>
-      </ul>
-      
-      <h3>Key Metrics</h3>
-      <ul>
-        <li>Request rate, error rate, response time</li>
-        <li>CPU, memory, disk usage</li>
-        <li>Database connections, query performance</li>
-        <li>Cache hit rate</li>
-      </ul>
-      <p><br></p>
-      
-      <h2>11. Dependencies</h2>
-      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="text-align: left;">Service/Library</th>
-            <th style="text-align: left;">Version</th>
-            <th style="text-align: left;">Purpose</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Express.js</td>
-            <td>4.x</td>
-            <td>Web framework</td>
-          </tr>
-          <tr>
-            <td>Sequelize</td>
-            <td>6.x</td>
-            <td>ORM</td>
-          </tr>
-          <tr>
-            <td>JWT</td>
-            <td>9.x</td>
-            <td>Authentication</td>
-          </tr>
-        </tbody>
-      </table>
-    `
+      <h2>4. Test Integration</h2>
+      <div class="test-case-links" data-type="integration-tests">
+        <p><em>Link integration and API test cases here.</em></p>
+      </div>
+    `,
+    metadata: {
+      linkedTestCases: [],
+      version: '1.0'
+    }
   },
 
-  'notes': {
+  [DOCUMENT_TYPES.NOTES]: {
     title: 'Notes',
     html: `
       <h1>Notes</h1>
       <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-      <p><strong>Topic:</strong> </p>
       <p><br></p>
       
-      <h2>Key Takeaways</h2>
+      <h2>Key Points</h2>
       <ul>
-        <li></li>
-        <li></li>
         <li></li>
       </ul>
       <p><br></p>
       
-      <h2>Details</h2>
-      <p></p>
+      <h2>Action Items</h2>
+      <ul>
+        <li>☐ </li>
+      </ul>
+    `,
+    metadata: {
+      linkedItems: []
+    }
+  },
+
+  [DOCUMENT_TYPES.BUG_ANALYSIS]: {
+    title: 'Bug Analysis Report',
+    html: `
+      <h1>Bug Analysis Report</h1>
+      <p><em>Period: [Date Range] | ${new Date().toLocaleDateString()}</em></p>
       <p><br></p>
       
-      <h2>Action Items</h2>
+      <h2>1. Overview</h2>
       <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
-        <thead>
-          <tr style="background-color: #f3f4f6;">
-            <th style="text-align: left; width: 10%;">Done</th>
-            <th style="text-align: left; width: 50%;">Task</th>
-            <th style="text-align: left; width: 20%;">Owner</th>
-            <th style="text-align: left; width: 20%;">Due Date</th>
-          </tr>
-        </thead>
         <tbody>
           <tr>
-            <td>☐</td>
-            <td></td>
-            <td></td>
-            <td></td>
+            <td style="background-color: #f3f4f6; font-weight: bold; width: 30%;">Total Bugs</td>
+            <td><span class="dynamic-field" data-field="totalBugs">0</span></td>
           </tr>
           <tr>
-            <td>☐</td>
-            <td></td>
-            <td></td>
-            <td></td>
+            <td style="background-color: #f3f4f6; font-weight: bold;">Open Bugs</td>
+            <td><span class="dynamic-field" data-field="openBugs">0</span></td>
           </tr>
           <tr>
-            <td>☐</td>
-            <td></td>
-            <td></td>
-            <td></td>
+            <td style="background-color: #f3f4f6; font-weight: bold;">Resolved Bugs</td>
+            <td><span class="dynamic-field" data-field="resolvedBugs">0</span></td>
+          </tr>
+          <tr>
+            <td style="background-color: #f3f4f6; font-weight: bold;">Average Resolution Time</td>
+            <td><span class="dynamic-field" data-field="avgResolutionTime">-- days</span></td>
           </tr>
         </tbody>
       </table>
       <p><br></p>
       
-      <h2>Questions / Follow-up</h2>
-      <ul>
-        <li></li>
-        <li></li>
-      </ul>
+      <h2>2. Bugs by Severity</h2>
+      <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background-color: #f3f4f6;">
+            <th style="text-align: left;">Severity</th>
+            <th style="text-align: center;">Count</th>
+            <th style="text-align: center;">% of Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Critical</td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="criticalCount">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="criticalPercent">0%</span></td>
+          </tr>
+          <tr>
+            <td>High</td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="highCount">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="highPercent">0%</span></td>
+          </tr>
+          <tr>
+            <td>Medium</td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="mediumCount">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="mediumPercent">0%</span></td>
+          </tr>
+          <tr>
+            <td>Low</td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="lowCount">0</span></td>
+            <td style="text-align: center;"><span class="dynamic-field" data-field="lowPercent">0%</span></td>
+          </tr>
+        </tbody>
+      </table>
       <p><br></p>
       
-      <h2>References</h2>
-      <ul>
-        <li></li>
-        <li></li>
-      </ul>
-    `
+      <h2>3. Root Cause Analysis</h2>
+      <p>[Analysis of common bug patterns and root causes]</p>
+      <p><br></p>
+      
+      <h2>4. Linked Bugs</h2>
+      <div class="bug-links" data-type="bugs">
+        <p><em>Bugs will be automatically linked based on the analysis period.</em></p>
+      </div>
+    `,
+    metadata: {
+      linkedBugs: [],
+      analysisperiod: null,
+      metrics: {}
+    }
   }
 };
 
 // Helper function to get template by type
 export const getTemplate = (type) => {
-  return documentTemplates[type] || documentTemplates['general'];
+  return documentTemplates[type] || documentTemplates[DOCUMENT_TYPES.GENERAL];
 };
 
 // Helper function to get all template types
 export const getTemplateTypes = () => {
-  return Object.keys(documentTemplates).map(key => ({
-    value: key,
-    label: key.split('-').map(word => 
+  return Object.values(DOCUMENT_TYPES).map(type => ({
+    value: type,
+    label: type.split('-').map(word => 
       word.charAt(0).toUpperCase() + word.slice(1)
     ).join(' ')
   }));
+};
+
+// Helper to check if document type supports test run linking
+export const supportsTestRunLinking = (type) => {
+  return [
+    DOCUMENT_TYPES.TEST_PLAN,
+    DOCUMENT_TYPES.TEST_STRATEGY,
+    DOCUMENT_TYPES.TEST_REPORT
+  ].includes(type);
+};
+
+// Helper to check if document type supports test case linking
+export const supportsTestCaseLinking = (type) => {
+  return [
+    DOCUMENT_TYPES.TEST_PLAN,
+    DOCUMENT_TYPES.REQUIREMENT,
+    DOCUMENT_TYPES.SPECIFICATION
+  ].includes(type);
+};
+
+// Helper to check if document type supports bug linking
+export const supportsBugLinking = (type) => {
+  return [
+    DOCUMENT_TYPES.TEST_PLAN,
+    DOCUMENT_TYPES.TEST_REPORT,
+    DOCUMENT_TYPES.BUG_ANALYSIS
+  ].includes(type);
 };
