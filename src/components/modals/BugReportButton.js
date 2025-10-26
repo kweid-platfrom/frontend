@@ -62,7 +62,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         console.log('Sprints available for bug report:', sprintsList);
         return sprintsList;
     }, [state.sprints]);
-    
+
     const modules = useMemo(() => STANDARD_SOFTWARE_MODULES, []);
 
     // Permission checks
@@ -268,13 +268,31 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
             // Handle sprint
             const sprintId = sourceData.sprint_id || sourceData.sprintId || null;
 
+            // CRITICAL FIX: Normalize stepsToReproduce - handle both array and string
+            let stepsToReproduce = sourceData.stepsToReproduce;
+            if (Array.isArray(stepsToReproduce)) {
+                // Convert array to numbered string
+                stepsToReproduce = stepsToReproduce
+                    .map((step, index) => {
+                        const cleanStep = typeof step === 'string'
+                            ? step.replace(/^\d+\.\s*/, '').trim()
+                            : String(step);
+                        return `${index + 1}. ${cleanStep}`;
+                    })
+                    .join('\n');
+            } else if (typeof stepsToReproduce === 'string') {
+                stepsToReproduce = stepsToReproduce.trim();
+            } else {
+                stepsToReproduce = '';
+            }
+
             const bugData = {
-                title: sourceData.title.trim(),
-                description: sourceData.description.trim(),
-                actualBehavior: sourceData.actualBehavior.trim(),
-                stepsToReproduce: sourceData.stepsToReproduce.trim() || "",
-                expectedBehavior: sourceData.expectedBehavior.trim() || "",
-                workaround: sourceData.workaround.trim() || "",
+                title: String(sourceData.title || '').trim(),
+                description: String(sourceData.description || '').trim(),
+                actualBehavior: String(sourceData.actualBehavior || '').trim(),
+                stepsToReproduce: stepsToReproduce,
+                expectedBehavior: String(sourceData.expectedBehavior || '').trim(),
+                workaround: String(sourceData.workaround || '').trim(),
                 assignedTo: sourceData.assignedTo || null,
                 assigned_to: sourceData.assignedTo || null,
                 status: "New",
@@ -334,11 +352,16 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 ].filter(Boolean)
             };
 
+            // If AI-generated, preserve AI metadata
+            if (isAIReport && sourceData.ai_metadata) {
+                bugData.ai_metadata = sourceData.ai_metadata;
+            }
+
             console.log('Submitting bug with user UID:', currentUser.uid);
             console.log('Bug creation type:', bugData.creationType);
+            console.log('Bug stepsToReproduce type:', typeof bugData.stepsToReproduce);
             console.log('Bug module:', bugData.module);
             console.log('Bug sprint:', bugData.sprint_id);
-            console.log('Bug data keys:', Object.keys(bugData));
 
             const result = await actions.bugs.createBug(bugData);
 

@@ -69,6 +69,30 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
         }
     }, []);
 
+    // Helper function to normalize steps to reproduce
+    const normalizeStepsToReproduce = useCallback((steps) => {
+        if (!steps) return '';
+        
+        // If it's already a string, return it
+        if (typeof steps === 'string') return steps;
+        
+        // If it's an array, join with newlines
+        if (Array.isArray(steps)) {
+            return steps
+                .map((step, index) => {
+                    // Remove numbering if already present
+                    const cleanStep = typeof step === 'string' 
+                        ? step.replace(/^\d+\.\s*/, '').trim()
+                        : String(step);
+                    return `${index + 1}. ${cleanStep}`;
+                })
+                .join('\n');
+        }
+        
+        // Fallback: convert to string
+        return String(steps);
+    }, []);
+
     // Create AI metadata for tracking
     const createAIMetadata = useCallback((prompt, consoleError, tokensUsed = null, cost = null) => {
         const operationId = `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -147,12 +171,18 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                 // Store metadata separately for UI display
                 setAiGenerationMetadata(metadata);
                 
-                // Process the evidence field for display
+                // CRITICAL FIX: Normalize stepsToReproduce to always be a string
                 const processedData = {
                     ...result.data,
+                    stepsToReproduce: normalizeStepsToReproduce(result.data.stepsToReproduce),
+                    actualBehavior: result.data.actualBehavior || '',
+                    expectedBehavior: result.data.expectedBehavior || '',
+                    title: result.data.title || '',
+                    description: result.data.description || '',
                     evidence: result.data.evidence ? formatEvidenceForDisplay(result.data.evidence) : undefined,
                     source: 'ai_generated',
-                    ai_metadata: metadata
+                    ai_metadata: metadata,
+                    creationType: 'ai' // Mark as AI-generated
                 };
                 
                 setGeneratedReport(processedData);
@@ -164,7 +194,7 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
             console.error('❌ Bug report generation failed:', err);
             setError(err.message || 'An unexpected error occurred');
         }
-    }, [prompt, consoleError, generateBugReport, clearAIError, formatEvidenceForDisplay, createAIMetadata, provider]);
+    }, [prompt, consoleError, generateBugReport, clearAIError, formatEvidenceForDisplay, normalizeStepsToReproduce, createAIMetadata, provider]);
 
     // Handle submitting the AI-generated report
     const handleSubmitGenerated = useCallback(async () => {
@@ -177,6 +207,14 @@ const AIPromptBugReport = ({ onSubmit, isProcessing, teamMembers, recordings, is
                 ...generatedReport,
                 attachments: attachments,
                 source: 'ai_generated',
+                creationType: 'ai', // Ensure this is set
+                // Ensure all string fields are properly trimmed
+                title: (generatedReport.title || '').trim(),
+                description: (generatedReport.description || '').trim(),
+                actualBehavior: (generatedReport.actualBehavior || '').trim(),
+                expectedBehavior: (generatedReport.expectedBehavior || '').trim(),
+                stepsToReproduce: (generatedReport.stepsToReproduce || '').trim(),
+                workaround: (generatedReport.workaround || '').trim(),
                 ai_metadata: {
                     ...generatedReport.ai_metadata,
                     submitted_at: new Date().toISOString(),

@@ -59,15 +59,35 @@ export const createAIUsageLog = (operationData = {}) => {
     error = null,
   } = operationData;
 
-  // Validate required fields
+  // Validate required fields with detailed error messages
   if (!operationType) {
-    throw new Error('operationType is required for AI usage log');
+    console.error('createAIUsageLog validation failed:', {
+      operationType,
+      hasUserId: !!userId,
+      hasSuiteId: !!suiteId,
+      allData: operationData
+    });
+    throw new Error(`operationType is required for AI usage log. Received: ${JSON.stringify({ operationType, operationData })}`);
   }
+  
   if (!userId) {
-    throw new Error('userId is required for AI usage log');
+    console.error('createAIUsageLog validation failed:', {
+      operationType,
+      userId,
+      hasSuiteId: !!suiteId,
+      allData: operationData
+    });
+    throw new Error(`userId is required for AI usage log. Make sure user is authenticated. Received: ${JSON.stringify({ userId, operationType })}`);
   }
+  
   if (!suiteId) {
-    throw new Error('suiteId is required for AI usage log');
+    console.error('createAIUsageLog validation failed:', {
+      operationType,
+      hasUserId: !!userId,
+      suiteId,
+      allData: operationData
+    });
+    throw new Error(`suiteId is required for AI usage log. Make sure activeTestSuite is set. Received: ${JSON.stringify({ suiteId, operationType })}`);
   }
 
   const timestamp = new Date();

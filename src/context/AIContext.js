@@ -1,7 +1,7 @@
 // contexts/AIContext.js - Central AI Service Context with Firestore Integration
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import { doc, setDoc, Timestamp } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 import aiServiceInstance from '../services/aiService';
 import { createAIUsageLog } from '../utils/aiMetadataHelper';
 import { useApp } from '../context/AppProvider';
@@ -57,13 +57,27 @@ export const AIProvider = ({ children }) => {
     // Log to Firestore
     const logToFirestore = useCallback(async (operationData) => {
         try {
+            // Get userId from Firebase Auth
+            const userId = auth.currentUser?.uid || appState.auth?.user?.uid;
             const suiteId = appState.suites?.activeSuite?.id;
+
+            if (!userId) {
+                console.warn('⚠️ Cannot log AI usage: User not authenticated');
+                return;
+            }
+
             if (!suiteId) {
                 console.warn('⚠️ No active suite - skipping Firestore logging');
                 return;
             }
 
-            const usageLog = createAIUsageLog(operationData);
+            // Create usage log with required fields
+            const usageLog = createAIUsageLog({
+                ...operationData,
+                userId, // ← Add userId
+                suiteId // ← Add suiteId
+            });
+
             const logRef = doc(db, `testSuites/${suiteId}/ai_usage_logs`, usageLog.id);
             
             await setDoc(logRef, {
@@ -76,7 +90,7 @@ export const AIProvider = ({ children }) => {
             console.error('❌ Failed to log AI usage to Firestore:', error);
             // Don't throw - logging failure shouldn't break AI operations
         }
-    }, [appState.suites?.activeSuite?.id]);
+    }, [appState.auth?.user?.uid, appState.suites?.activeSuite?.id]);
 
     // Initialize AI services
     const initialize = useCallback(async () => {
@@ -148,8 +162,18 @@ export const AIProvider = ({ children }) => {
         }));
 
         // Firestore logging (async, non-blocking)
-        // Skip logging for test_case_generation - it will be logged after saving with asset IDs
-        if (operation.success && operation.shouldLog !== false && operation.type !== 'test_cases') {
+        // Skip logging for:
+        // - test_cases (logged after saving with asset IDs)
+        // - bug_report (logged when bug is saved, not during generation)
+        const skipFirestoreLogging = [
+            'test_cases',
+            'bug_report'
+        ];
+
+        if (operation.success && 
+            operation.shouldLog !== false && 
+            !skipFirestoreLogging.includes(operation.type)) {
+            
             logToFirestore({
                 operationId: operation.operation_id || operation.id,
                 operationType: operation.type,
@@ -162,11 +186,9 @@ export const AIProvider = ({ children }) => {
                 success: operation.success,
                 promptSummary: operation.promptSummary || '',
                 promptLength: operation.promptLength || 0,
-                userId: appState.auth?.user?.uid,
-                suiteId: appState.suites?.activeSuite?.id,
             });
         }
-    }, [safeSetState, logToFirestore, appState.auth?.user?.uid, appState.suites?.activeSuite?.id]);
+    }, [safeSetState, logToFirestore]);
 
     // Update loading state
     const setLoadingState = useCallback((operation, isLoading) => {
