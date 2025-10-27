@@ -235,7 +235,7 @@ const calculateMetricsFromData = (logs, testCasesDocs, bugsDocs, dateRange) => {
  * @param {number} dateRange - Date range in days
  * @returns {Object} Daily stats
  */
-const calculateDailyStats = (logs, dateRange) => {
+const calculateDailyStats = (logs) => {
   const stats = {};
   
   logs.forEach(log => {

@@ -42,7 +42,7 @@ const AIHighlights = ({
   const analysisTriggeredRef = useRef(false);
 
   // Get AI context
-  const { generatePlainTextContent, isReady, error: aiError } = useAI();
+  const { generatePlainTextContent, isReady } = useAI();
 
   // Icon mapping for different insight types
   const iconMapping = {

@@ -1,4 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+'use client';
+
+import React, { useState, useCallback } from 'react';
 import { Users, TrendingUp, Award, Clock, Target, Activity, Bot, Sparkles, AlertTriangle, CheckCircle } from 'lucide-react';
 
 const TeamProductivity = ({ metrics, aiService }) => {

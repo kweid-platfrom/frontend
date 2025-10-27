@@ -4,12 +4,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Terminal, Network, Bug, Info, MessageSquare, CheckCircle, AlertTriangle, Bot } from 'lucide-react';
 import AIHighlights from '../recorder/AIHighlights';
+import { useAIBugGenerator } from '@/context/AIBugGeneratorContext';
 
 const RecordingViewerLeftPanel = ({ 
   recording,
   videoRef,
-  activeSuite,
-  firestoreService,
   onAddComment
 }) => {
   const [activeTab, setActiveTab] = useState('comments');
@@ -19,6 +18,7 @@ const RecordingViewerLeftPanel = ({
   const [showAIInsights, setShowAIInsights] = useState(true);
   const [aiInsights, setAiInsights] = useState([]);
   const commentsEndRef = useRef(null);
+  const { openGenerator } = useAIBugGenerator();
 
   const formatTime = (s) => {
     if (!s || isNaN(s)) return '0:00';
@@ -40,7 +40,6 @@ const RecordingViewerLeftPanel = ({
     const player = videoRef?.current;
     if (!player) return;
 
-    // For YouTube player, poll for current time
     const updateTime = () => {
       if (player.getCurrentTime && typeof player.getCurrentTime === 'function') {
         const time = player.getCurrentTime();
@@ -50,9 +49,7 @@ const RecordingViewerLeftPanel = ({
       }
     };
 
-    // Poll every 100ms for YouTube player
     const intervalId = setInterval(updateTime, 100);
-    
     return () => clearInterval(intervalId);
   }, [videoRef]);
 
@@ -83,37 +80,54 @@ const RecordingViewerLeftPanel = ({
     setActiveTab('comments');
   };
 
-  // Create bug from detected issue
-  const createBugFromIssue = async (issue) => {
-    if (!activeSuite?.id || !firestoreService) {
-      alert('Please select a test suite first.');
-      return;
-    }
-    
-    try {
-      const bugData = {
-        title: `Bug: ${issue.message.substring(0, 100)}${issue.message.length > 100 ? '...' : ''}`,
-        description: `Automatically detected issue from screen recording\n\nType: ${issue.type}\nSeverity: ${issue.severity}\nTime: ${issue.time}\n\nDetails: ${issue.message}`,
-        severity: issue.severity,
-        status: 'open',
-        source: 'screen_recording',
-        recordingData: {
-          consoleLogs: issue.source === 'console' ? [issue] : [],
-          networkLogs: issue.source === 'network' ? [issue.requestData] : [],
-        },
-      };
-      
-      const result = await firestoreService.createBug(activeSuite.id, bugData);
-      if (result.success) {
+  // Create bug from detected issue - just open AI modal with pre-filled data
+  const createBugFromIssue = (issue) => {
+    const issueDescription = `Detected Issue from Screen Recording
+
+Issue Type: ${issue.type}
+Severity: ${issue.severity}
+Time Detected: ${formatTime(issue.time)}
+Source: ${issue.source || 'Screen Recording'}
+
+Details:
+${issue.message}
+
+${issue.requestData ? `
+Network Request Details:
+- URL: ${issue.requestData.url || 'N/A'}
+- Method: ${issue.requestData.method || 'N/A'}
+- Status: ${issue.requestData.status || 'N/A'}
+- Error: ${issue.requestData.error || 'N/A'}
+` : ''}`;
+
+    const consoleErrorText = issue.source === 'console' ? issue.message : '';
+
+    // Open AI Bug Generator with pre-filled data
+    // The modal context handles everything else including bug creation
+    openGenerator(
+      (generatedBugData) => {
+        // Mark this issue as processed
         setSelectedBugs(prev => [...prev, issue.id]);
-        alert('Bug created successfully!');
-      } else {
-        throw new Error(result.error?.message || 'Failed to create bug');
+        
+        // Add recording metadata to the bug data
+        return {
+          ...generatedBugData,
+          source: 'screen_recording',
+          recordingData: {
+            consoleLogs: issue.source === 'console' ? [issue] : [],
+            networkLogs: issue.source === 'network' ? [issue.requestData] : [],
+            issueId: issue.id,
+            recordingTime: issue.time,
+            recordingTitle: recording?.title || 'Untitled Recording',
+            recordingId: recording?.id
+          },
+        };
+      },
+      {
+        initialPrompt: issueDescription,
+        initialConsoleError: consoleErrorText
       }
-    } catch (err) {
-      console.error('Failed to create bug:', err);
-      alert('Failed to create bug: ' + err.message);
-    }
+    );
   };
 
   // Handle AI insights actions
@@ -121,7 +135,6 @@ const RecordingViewerLeftPanel = ({
     console.log('Saving AI insights:', insights);
     setAiInsights(insights);
     
-    // Create downloadable JSON file
     const insightsData = {
       recordingId: recording?.id || `recording_${Date.now()}`,
       recordingTitle: recording?.title || 'Untitled Recording',
@@ -150,83 +163,77 @@ const RecordingViewerLeftPanel = ({
   };
 
   // Handle test case creation from AI insight
-  const handleCreateTestCaseFromInsight = async (insight) => {
-    if (!activeSuite?.id || !firestoreService) {
-      alert('Please select a test suite first.');
-      return;
-    }
+  const handleCreateTestCaseFromInsight = (insight) => {
+    const testCasePrompt = `Create Test Case from AI Insight
 
-    try {
-      const testCaseData = {
-        title: insight.title || `Test: ${insight.description.substring(0, 80)}...`,
-        description: insight.description,
-        priority: insight.severity === 'critical' ? 'Critical' : 
-                 insight.severity === 'high' ? 'High' :
-                 insight.severity === 'medium' ? 'Medium' : 'Low',
-        category: insight.category || 'AI Generated',
-        steps: [
-          'Navigate to the affected area identified by AI analysis',
-          'Reproduce the scenario that triggered the insight',
-          'Verify the expected behavior matches requirements'
-        ],
-        expectedResult: insight.recommendation || 'System should behave as expected without issues',
-        tags: [...(insight.tags || []), 'ai-generated', 'from-recording'],
-        source: 'ai_insight',
-        automationPotential: insight.automationPotential || 'medium',
-        confidence: insight.confidence || 0,
-        recordingTime: insight.time || 0,
-        recordingId: recording?.id
-      };
+Title: ${insight.title || 'Test Case'}
+Description: ${insight.description}
+Severity: ${insight.severity}
+Category: ${insight.category || 'AI Generated'}
+Recommendation: ${insight.recommendation || 'N/A'}
 
-      const result = await firestoreService.createTestCase(activeSuite.id, testCaseData);
-      if (result.success) {
-        alert(`Test case created successfully: ${testCaseData.title}`);
-      } else {
-        throw new Error(result.error?.message || 'Failed to create test case');
+Recording Context:
+- Recording: ${recording?.title || 'Untitled Recording'}
+- Time: ${formatTime(insight.time || 0)}
+- Confidence: ${(insight.confidence || 0) * 100}%`;
+
+    openGenerator(
+      (generatedData) => {
+        return {
+          ...generatedData,
+          source: 'ai_insight',
+          recordingData: {
+            aiInsight: insight,
+            recordingId: recording?.id,
+            recordingTitle: recording?.title,
+            recordingTime: insight.time
+          }
+        };
+      },
+      {
+        initialPrompt: testCasePrompt
       }
-    } catch (error) {
-      console.error('Failed to create test case from insight:', error);
-      alert('Failed to create test case: ' + error.message);
-    }
+    );
   };
 
   // Handle bug creation from AI insight
-  const handleCreateBugFromInsight = async (insight) => {
-    if (!activeSuite?.id || !firestoreService) {
-      alert('Please select a test suite first.');
-      return;
-    }
+  const handleCreateBugFromInsight = (insight) => {
+    const bugPrompt = `AI Detected Bug from Recording Analysis
 
-    try {
-      const bugData = {
-        title: `AI Bug: ${insight.title || insight.description.substring(0, 80)}...`,
-        description: `Bug identified by AI analysis\n\n${insight.description}\n\nRecommendation: ${insight.recommendation || 'Review and fix the identified issue'}`,
-        severity: insight.severity || 'medium',
-        status: 'open',
-        source: 'ai_insight',
-        category: insight.category || 'AI Detected',
-        tags: [...(insight.tags || []), 'ai-detected', 'from-recording'],
-        confidence: insight.confidence || 0,
-        recordingTime: insight.time || 0,
-        automationPotential: insight.automationPotential || 'medium',
-        recordingId: recording?.id,
-        recordingData: {
-          aiInsight: insight,
-          relatedLogs: insight.relatedLogs || [],
-          timestamp: new Date().toISOString()
-        }
-      };
+Issue: ${insight.title || insight.description}
+Severity: ${insight.severity}
+Category: ${insight.category || 'AI Detected'}
+Confidence: ${(insight.confidence || 0) * 100}%
 
-      const result = await firestoreService.createBug(activeSuite.id, bugData);
-      if (result.success) {
-        alert(`Bug created successfully: ${bugData.title}`);
-      } else {
-        throw new Error(result.error?.message || 'Failed to create bug');
+Description:
+${insight.description}
+
+Recommendation:
+${insight.recommendation || 'Review and fix the identified issue'}
+
+Recording Details:
+- Recording: ${recording?.title || 'Untitled Recording'}
+- Time: ${formatTime(insight.time || 0)}
+- Automation Potential: ${insight.automationPotential || 'medium'}`;
+
+    openGenerator(
+      (generatedData) => {
+        return {
+          ...generatedData,
+          source: 'ai_insight',
+          recordingData: {
+            aiInsight: insight,
+            relatedLogs: insight.relatedLogs || [],
+            recordingId: recording?.id,
+            recordingTitle: recording?.title,
+            recordingTime: insight.time
+          }
+        };
+      },
+      {
+        initialPrompt: bugPrompt
       }
-    } catch (error) {
-      console.error('Failed to create bug from insight:', error);
-      alert('Failed to create bug: ' + error.message);
-    }
+    );
   };
 
   const toggleAIInsights = () => {
@@ -241,7 +248,6 @@ const RecordingViewerLeftPanel = ({
     { id: 'info', label: 'Info', icon: Info, count: 0 }
   ];
 
-  // Get AI insights count for display
   const aiInsightCount = aiInsights.length;
   const criticalInsightCount = aiInsights.filter(insight => 
     insight.severity === 'critical' || insight.severity === 'high'
@@ -251,7 +257,6 @@ const RecordingViewerLeftPanel = ({
     <div className="w-full h-full flex flex-col">
       {/* AI Insights Section - 50% */}
       <div className="h-1/2 flex-shrink-0 border-b border-gray-200 dark:border-gray-700 flex flex-col">
-        {/* AI Toggle Button with Stats */}
         <div className="p-2 sm:p-3 border-b border-gray-200 dark:border-gray-700">
           <button
             onClick={toggleAIInsights}
@@ -279,7 +284,6 @@ const RecordingViewerLeftPanel = ({
           </button>
         </div>
 
-        {/* AI Insights Content - Scrollable */}
         <div className="flex-1 overflow-y-auto">
           {showAIInsights ? (
             <div className="p-2 sm:p-3">
@@ -311,7 +315,6 @@ const RecordingViewerLeftPanel = ({
 
       {/* Comments/DevTools Section - 50% */}
       <div className="h-1/2 flex-shrink-0 flex flex-col">
-        {/* Comment Input - Above tabs */}
         <div className="p-2 sm:p-3 border-b border-gray-200 dark:border-gray-700">
           <div className="flex space-x-1 sm:space-x-2">
             <input
@@ -336,7 +339,6 @@ const RecordingViewerLeftPanel = ({
           </div>
         </div>
 
-        {/* Tabs */}
         <div className="flex overflow-x-auto overflow-y-hidden border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 scrollbar-thin scrollbar-thumb-gray-300 dark:scrollbar-thumb-gray-600">
           {tabs.map(({ id, label, icon: Icon, count }) => (
             <button
@@ -363,9 +365,7 @@ const RecordingViewerLeftPanel = ({
           ))}
         </div>
 
-        {/* Tab Content - Vertically Scrollable */}
         <div className="flex-1 overflow-y-auto p-2 sm:p-3">
-          {/* Comments Tab */}
           {activeTab === 'comments' && (
             <div className="space-y-2">
               {(!recording?.comments || recording.comments.length === 0) ? (
@@ -401,7 +401,6 @@ const RecordingViewerLeftPanel = ({
             </div>
           )}
 
-          {/* Console Tab */}
           {activeTab === 'console' && (
             <div className="space-y-1">
               {(!recording?.consoleLogs || recording.consoleLogs.length === 0) ? (
@@ -441,7 +440,6 @@ const RecordingViewerLeftPanel = ({
             </div>
           )}
 
-          {/* Network Tab */}
           {activeTab === 'network' && (
             <div className="space-y-2">
               {(!recording?.networkLogs || recording.networkLogs.length === 0) ? (
@@ -492,7 +490,6 @@ const RecordingViewerLeftPanel = ({
             </div>
           )}
 
-          {/* Issues Tab */}
           {activeTab === 'issues' && (
             <div className="space-y-2">
               {(!recording?.detectedIssues || recording.detectedIssues.length === 0) ? (
@@ -550,11 +547,11 @@ const RecordingViewerLeftPanel = ({
                         className={`flex-shrink-0 px-1.5 sm:px-2 py-1 text-[9px] sm:text-[10px] rounded transition-colors ${
                           selectedBugs.includes(issue.id)
                             ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                            : 'bg-red-600 text-white hover:bg-red-700'
+                            : 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700'
                         }`}
                         disabled={selectedBugs.includes(issue.id)}
                       >
-                        {selectedBugs.includes(issue.id) ? 'Created' : 'Create Bug'}
+                        {selectedBugs.includes(issue.id) ? 'Created' : 'AI Bug'}
                       </button>
                     </div>
                   </div>
@@ -563,7 +560,6 @@ const RecordingViewerLeftPanel = ({
             </div>
           )}
 
-          {/* Info Tab */}
           {activeTab === 'info' && (
             <div className="text-[11px] sm:text-xs space-y-2">
               <div className="grid grid-cols-1 gap-2">

@@ -5,6 +5,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { AppProvider, useApp } from '../context/AppProvider';
 import { AIProvider } from '../context/AIContext';
+import { AIBugGeneratorProvider } from '../context/AIBugGeneratorContext';
 import LoadingScreen from './common/LoadingScreen';
 import Register from './auth/Register';
 import Login from './auth/Login';
@@ -20,7 +21,6 @@ const AppProviderWrapper = ({ children }) => {
   const pathname = usePathname();
   const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password', '/verify-email'];
   
-  // FIXED: Check if path starts with /learn (catches /learn, /learn/*, /learn/test-types, etc.)
   const isPublicRoute = publicRoutes.includes(pathname) || pathname.startsWith('/learn');
 
   if (isPublicRoute) {
@@ -29,15 +29,16 @@ const AppProviderWrapper = ({ children }) => {
 
   return (
     <AppProvider>
-      {/* Wrap AIProvider inside AppProvider so AI has access to app state */}
       <AIProvider>
-        <ProtectedRouteContent>{children}</ProtectedRouteContent>
+        <AIBugGeneratorProvider>
+          <ProtectedRouteContent>{children}</ProtectedRouteContent>
+        </AIBugGeneratorProvider>
       </AIProvider>
     </AppProvider>
   );
 };
 
-// New component for public routes that still has access to global theme
+// Component for public routes
 const PublicRouteContent = ({ children }) => {
   return <div className="public-route">{children}</div>;
 };
@@ -51,7 +52,6 @@ const ProtectedRouteContent = ({ children }) => {
   const [showCreateSuiteModal, setShowCreateSuiteModal] = useState(false);
   const [showTipsMode, setShowTipsMode] = useState(false);
   const [interactionCount, setInteractionCount] = useState(() => {
-    // Load interaction count from localStorage
     if (typeof window !== 'undefined') {
       const stored = localStorage.getItem(STORAGE_KEY);
       return stored ? parseInt(stored, 10) : 0;
@@ -63,7 +63,6 @@ const ProtectedRouteContent = ({ children }) => {
   const interactiveRoutes = ['/test-cases', '/bugs', '/sprints', '/dashboard'];
   const shouldBypassTipsMode = bypassTipsModeRoutes.some((route) => pathname.startsWith(route));
 
-  // Track user interactions
   const trackInteraction = useCallback(() => {
     setInteractionCount((prev) => {
       const newCount = prev + 1;
@@ -74,14 +73,12 @@ const ProtectedRouteContent = ({ children }) => {
     });
   }, []);
 
-  // Monitor page navigation for interactions
   useEffect(() => {
     if (interactiveRoutes.some((route) => pathname.startsWith(route))) {
       trackInteraction();
     }
   }, [pathname, trackInteraction]);
 
-  // Memoized helper functions
   const needsEmailVerification = useCallback(
     () =>
       state.auth.currentUser?.uid &&
@@ -117,7 +114,6 @@ const ProtectedRouteContent = ({ children }) => {
     [isFullyAuthenticated, state.suites.testSuites, state.suites.activeSuite]
   );
 
-  // Handle suite creation
   const handleSuiteCreated = useCallback(
     async (suiteData) => {
       try {
@@ -125,10 +121,9 @@ const ProtectedRouteContent = ({ children }) => {
         await actions.suites.loadTestSuites();
         if (suiteData?.id) {
           await actions.suites.activateSuite(suiteData);
-          trackInteraction(); // Count suite creation as an interaction
+          trackInteraction();
         }
         
-        // Use centralized notification system instead of direct toast
         actions.ui.showNotification({
           id: `suite-created-${Date.now()}`,
           type: 'success',
@@ -142,7 +137,6 @@ const ProtectedRouteContent = ({ children }) => {
       } catch (error) {
         console.error('Error after suite creation:', error);
         
-        // Use centralized notification system for errors
         actions.ui.showNotification({
           id: `suite-error-${Date.now()}`,
           type: 'error',
@@ -163,10 +157,9 @@ const ProtectedRouteContent = ({ children }) => {
         await actions.suites.loadTestSuites();
         if (newSuite?.id) {
           await actions.suites.activateSuite(newSuite);
-          trackInteraction(); // Count suite creation as an interaction
+          trackInteraction();
         }
         
-        // Use centralized notification system
         actions.ui.showNotification({
           id: `tips-suite-created-${Date.now()}`,
           type: 'success',
@@ -179,7 +172,6 @@ const ProtectedRouteContent = ({ children }) => {
       } catch (error) {
         console.error('Error after tips suite creation:', error);
         
-        // Use centralized notification system for errors
         actions.ui.showNotification({
           id: `tips-suite-error-${Date.now()}`,
           type: 'error',
@@ -191,7 +183,6 @@ const ProtectedRouteContent = ({ children }) => {
     [actions.suites, actions.ui, interactionCount, shouldBypassTipsMode, trackInteraction]
   );
 
-  // Main effect for authentication and suite handling
   useEffect(() => {
     let mounted = true;
 
@@ -239,7 +230,6 @@ const ProtectedRouteContent = ({ children }) => {
         } catch (error) {
           console.error('Error handling trial expiry:', error);
           
-          // Use centralized notification system
           actions.ui.showNotification({
             id: `trial-expiry-error-${Date.now()}`,
             type: 'error',

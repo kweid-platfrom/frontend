@@ -18,6 +18,7 @@ import { useBugs } from '@/hooks/useBugs';
 import { useUI } from '@/hooks/useUI';
 import { useApp } from '@/context/AppProvider';
 import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
+import AIBugGeneratorButton from '@/components/modals/AIBugGeneratorButton';
 import {
     Lightbulb,
     Minimize,
@@ -732,19 +733,19 @@ const BugTrackerPage = () => {
 
     const MobileActionMenu = () => (
         <div className={`
-            fixed inset-0 z-50 lg:hidden transition-all duration-300 ease-in-out
-            ${isMobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
-        `}>
+        fixed inset-0 z-50 lg:hidden transition-all duration-300 ease-in-out
+        ${isMobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}
+    `}>
             <div
                 className="absolute inset-0 bg-black bg-opacity-50"
                 onClick={() => setIsMobileMenuOpen(false)}
             />
 
             <div className={`
-                absolute bottom-0 left-0 right-0 bg-card rounded-t-lg shadow-theme-xl p-4 space-y-3
-                transform transition-transform duration-300 ease-in-out
-                ${isMobileMenuOpen ? 'translate-y-0' : 'translate-y-full'}
-            `}>
+            absolute bottom-0 left-0 right-0 bg-card rounded-t-lg shadow-theme-xl p-4 space-y-3
+            transform transition-transform duration-300 ease-in-out
+            ${isMobileMenuOpen ? 'translate-y-0' : 'translate-y-full'}
+        `}>
                 <div className="flex items-center justify-between pb-3 border-b border-border">
                     <h3 className="text-lg font-semibold text-foreground">Actions</h3>
                     <button
@@ -781,7 +782,17 @@ const BugTrackerPage = () => {
                         </>
                     )}
 
-                    <div className="pt-2">
+                    <div className="pt-2 space-y-2">
+                        {/* AI Bug Generator */}
+                        <AIBugGeneratorButton
+                            className="w-full justify-center"
+                            onBugCreated={(newBug) => {
+                                console.log('AI Bug created:', newBug);
+                                setIsMobileMenuOpen(false);
+                            }}
+                        />
+
+                        {/* Regular Bug Report */}
                         <BugReportButton
                             bug={null}
                             onSave={handleSaveBug}
@@ -791,7 +802,7 @@ const BugTrackerPage = () => {
                             }}
                             activeSuite={bugsHook.activeSuite || { id: 'default', name: 'Default Suite' }}
                             currentUser={bugsHook.currentUser || { uid: 'anonymous', email: 'anonymous' }}
-                            className="w-full"
+                            className="w-full justify-center"
                         />
                     </div>
                 </div>
@@ -996,6 +1007,16 @@ const BugTrackerPage = () => {
                                     </button>
                                 </>
                             )}
+
+                            {/* AI Bug Generator Button */}
+                            <AIBugGeneratorButton
+                                onBugCreated={(newBug) => {
+                                    console.log('AI Bug created:', newBug);
+                                    // Optionally refresh bugs or handle the new bug
+                                }}
+                            />
+
+                            {/* Regular Bug Report Button */}
                             <BugReportButton
                                 bug={null}
                                 onSave={handleSaveBug}
@@ -1007,6 +1028,13 @@ const BugTrackerPage = () => {
 
                         {/* Mobile/Tablet Actions */}
                         <div className="flex lg:hidden items-center space-x-2">
+                            {/* AI Bug Generator for mobile */}
+                            <AIBugGeneratorButton
+                                onBugCreated={(newBug) => {
+                                    console.log('AI Bug created:', newBug);
+                                }}
+                            />
+
                             {/* Quick Bug Report Button for mobile */}
                             <div className="sm:block">
                                 <BugReportButton

@@ -15,13 +15,11 @@ import {
   CAN_UNDO_COMMAND,
   CAN_REDO_COMMAND,
   COMMAND_PRIORITY_LOW,
-  KEY_MODIFIER_COMMAND
 } from 'lexical';
 import { 
   $isHeadingNode,
   $createHeadingNode, 
   $createQuoteNode,
-  HeadingTagType 
 } from '@lexical/rich-text';
 import { 
   INSERT_ORDERED_LIST_COMMAND, 
@@ -30,13 +28,13 @@ import {
   REMOVE_LIST_COMMAND,
   $isListNode
 } from '@lexical/list';
-import { $createCodeNode, $isCodeNode } from '@lexical/code';
+import { $createCodeNode } from '@lexical/code';
 import { $setBlocksType } from '@lexical/selection';
 import { 
   Bold, Italic, Underline, Strikethrough, AlignLeft, AlignCenter, 
   AlignRight, AlignJustify, List, ListOrdered, Quote,
   Code, Undo, Redo, CheckSquare, FileCode,
-  RemoveFormatting, Search, Replace, BookOpen, FileType
+  RemoveFormatting, Search, BookOpen, FileType
 } from 'lucide-react';
 
 const TEXT_COLORS = [

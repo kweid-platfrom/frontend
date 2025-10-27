@@ -30,7 +30,6 @@ export const STANDARD_SOFTWARE_MODULES = [
     { id: 'other', name: 'Other (Specify below)' }
 ];
 
-
 const BugReportButton = ({ className = "", onCreateBug }) => {
     const {
         state,
@@ -46,26 +45,22 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
     const [formData, setFormData] = useState({
         ...DEFAULT_BUG_FORM_DATA,
         selectedSuiteId: null,
-        creationType: 'manual' // Default to manual
+        creationType: 'manual'
     });
     const [attachments, setAttachments] = useState([]);
     const [error, setError] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Memoized data from context
     const suites = useMemo(() => state.suites.testSuites || [], [state.suites.testSuites]);
     const userProfile = useMemo(() => state.auth.profile, [state.auth.profile]);
 
-    // Memoized sprints and modules from context
     const sprints = useMemo(() => {
         const sprintsList = state.sprints?.sprints || state.sprints?.list || [];
-        console.log('Sprints available for bug report:', sprintsList);
         return sprintsList;
     }, [state.sprints]);
 
     const modules = useMemo(() => STANDARD_SOFTWARE_MODULES, []);
 
-    // Permission checks
     const canCreateBugs = useMemo(() => {
         return state.subscription?.planLimits?.canCreateBugs !== false;
     }, [state.subscription?.planLimits?.canCreateBugs]);
@@ -98,7 +93,6 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         setMounted(true);
     }, []);
 
-    // Prevent body scroll when modal is open
     useEffect(() => {
         if (showBugForm) {
             document.body.style.overflow = 'hidden';
@@ -160,18 +154,12 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     }, []);
 
-    const validateForm = useCallback((bugData) => {
+    const validateForm = useCallback(() => {
         if (!formData.selectedSuiteId) {
             setError("Please select a test suite");
             return false;
         }
 
-        // For AI-generated reports, we already have the data validated
-        if (bugData?.creationType === 'ai') {
-            return true;
-        }
-
-        // For manual reports, validate the form data
         const validation = validateBugForm(formData);
         if (!validation.isValid) {
             setError(validation.errors[0]);
@@ -193,14 +181,12 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         setIsSubmitting(false);
     }, []);
 
-    // Handle backdrop click
     const handleBackdropClick = useCallback((e) => {
         if (e.target === e.currentTarget) {
             closeForm();
         }
     }, [closeForm]);
 
-    // Handle escape key
     useEffect(() => {
         const handleEscape = (e) => {
             if (e.key === 'Escape' && showBugForm) {
@@ -212,7 +198,6 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         return () => document.removeEventListener('keydown', handleEscape);
     }, [showBugForm, closeForm]);
 
-    // Helper function for safe lowercase conversion
     const safeToLowerCase = useCallback((value) => {
         if (value === null || value === undefined) return null;
         if (typeof value === 'string') return value.toLowerCase();
@@ -220,8 +205,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         return String(value).toLowerCase();
     }, []);
 
-    // Generic submit handler that works for both manual and AI reports
-    const handleSubmit = useCallback(async (bugDataOverride) => {
+    const handleManualSubmit = useCallback(async () => {
         if (!canCreateBugs) {
             setError("Bug creation is not available with your current plan. Please upgrade.");
             actions.ui.showNotification({
@@ -242,36 +226,29 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
             return;
         }
 
-        const isAIReport = bugDataOverride?.creationType === 'ai';
-        const sourceData = isAIReport ? bugDataOverride : formData;
-
-        if (!validateForm(bugDataOverride)) return;
+        if (!validateForm()) return;
 
         setIsSubmitting(true);
         setError("");
 
         try {
             const hasAttachments = attachments.length > 0;
-            const priority = getPriorityFromSeverity(sourceData.severity);
+            const priority = getPriorityFromSeverity(formData.severity);
             const currentTimestamp = Timestamp.fromDate(new Date());
 
             if (!currentUser?.uid) {
                 throw new Error('User authentication required');
             }
 
-            // Handle module - use custom module if "other" is selected
-            const moduleId = sourceData.module_id || sourceData.moduleId || null;
+            const moduleId = formData.module_id || formData.moduleId || null;
             const finalModule = moduleId === 'other'
-                ? (sourceData.customModule || 'Other')
+                ? (formData.customModule || 'Other')
                 : moduleId;
 
-            // Handle sprint
-            const sprintId = sourceData.sprint_id || sourceData.sprintId || null;
+            const sprintId = formData.sprint_id || formData.sprintId || null;
 
-            // CRITICAL FIX: Normalize stepsToReproduce - handle both array and string
-            let stepsToReproduce = sourceData.stepsToReproduce;
+            let stepsToReproduce = formData.stepsToReproduce;
             if (Array.isArray(stepsToReproduce)) {
-                // Convert array to numbered string
                 stepsToReproduce = stepsToReproduce
                     .map((step, index) => {
                         const cleanStep = typeof step === 'string'
@@ -287,33 +264,33 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
             }
 
             const bugData = {
-                title: String(sourceData.title || '').trim(),
-                description: String(sourceData.description || '').trim(),
-                actualBehavior: String(sourceData.actualBehavior || '').trim(),
+                title: String(formData.title || '').trim(),
+                description: String(formData.description || '').trim(),
+                actualBehavior: String(formData.actualBehavior || '').trim(),
                 stepsToReproduce: stepsToReproduce,
-                expectedBehavior: String(sourceData.expectedBehavior || '').trim(),
-                workaround: String(sourceData.workaround || '').trim(),
-                assignedTo: sourceData.assignedTo || null,
-                assigned_to: sourceData.assignedTo || null,
+                expectedBehavior: String(formData.expectedBehavior || '').trim(),
+                workaround: String(formData.workaround || '').trim(),
+                assignedTo: formData.assignedTo || null,
+                assigned_to: formData.assignedTo || null,
                 status: "New",
                 priority: priority,
-                severity: sourceData.severity,
-                category: sourceData.category,
+                severity: formData.severity,
+                category: formData.category,
                 module: finalModule,
                 module_id: moduleId,
-                customModule: moduleId === 'other' ? sourceData.customModule : null,
+                customModule: moduleId === 'other' ? formData.customModule : null,
                 sprint_id: sprintId,
                 sprintId: sprintId,
-                tags: [safeToLowerCase(sourceData.category).replace(/\s+/g, '_')],
-                source: isAIReport ? "AI Generated" : "Manual",
-                creationType: isAIReport ? "ai" : "manual",
-                environment: sourceData.environment || "Production",
-                frequency: sourceData.frequency || "Once",
+                tags: [safeToLowerCase(formData.category).replace(/\s+/g, '_')],
+                source: "Manual",
+                creationType: "manual",
+                environment: formData.environment || "Production",
+                frequency: formData.frequency || "Once",
                 browserInfo: formData.browserInfo || getBrowserInfo(),
                 deviceInfo: formData.deviceInfo || getDeviceInfo(),
                 userAgent: formData.userAgent || navigator.userAgent,
-                hasConsoleLogs: sourceData.hasConsoleLogs || false,
-                hasNetworkLogs: sourceData.hasNetworkLogs || false,
+                hasConsoleLogs: formData.hasConsoleLogs || false,
+                hasNetworkLogs: formData.hasNetworkLogs || false,
                 hasAttachments,
                 attachments: attachments.map(att => ({
                     name: att.name,
@@ -341,27 +318,16 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 updatedByName: userDisplayName(),
                 version: 1,
                 searchTerms: [
-                    safeToLowerCase(sourceData.title),
-                    safeToLowerCase(sourceData.description),
-                    safeToLowerCase(sourceData.category),
-                    safeToLowerCase(sourceData.severity),
+                    safeToLowerCase(formData.title),
+                    safeToLowerCase(formData.description),
+                    safeToLowerCase(formData.category),
+                    safeToLowerCase(formData.severity),
                     finalModule ? safeToLowerCase(finalModule) : null,
                     "new",
-                    isAIReport ? "ai_generated" : "manual",
-                    safeToLowerCase(sourceData.environment)
+                    "manual",
+                    safeToLowerCase(formData.environment)
                 ].filter(Boolean)
             };
-
-            // If AI-generated, preserve AI metadata
-            if (isAIReport && sourceData.ai_metadata) {
-                bugData.ai_metadata = sourceData.ai_metadata;
-            }
-
-            console.log('Submitting bug with user UID:', currentUser.uid);
-            console.log('Bug creation type:', bugData.creationType);
-            console.log('Bug stepsToReproduce type:', typeof bugData.stepsToReproduce);
-            console.log('Bug module:', bugData.module);
-            console.log('Bug sprint:', bugData.sprint_id);
 
             const result = await actions.bugs.createBug(bugData);
 
@@ -375,11 +341,10 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                 }
             }
 
-            const reportTypeDisplay = isAIReport ? 'AI-generated' : 'Manual';
             actions.ui.showNotification({
                 type: 'success',
                 title: 'Bug Created Successfully',
-                message: `${reportTypeDisplay} bug "${sourceData.title.trim()}" has been created and assigned.`
+                message: `Bug "${formData.title.trim()}" has been created and assigned.`
             });
 
             closeForm();
@@ -411,18 +376,12 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         safeToLowerCase
     ]);
 
-    // Manual form submit handler
-    const handleManualSubmit = useCallback(() => {
-        handleSubmit();
-    }, [handleSubmit]);
-
     const handleButtonClick = useCallback((event) => {
         if (event) {
             event.preventDefault();
             event.stopPropagation();
         }
 
-        console.log('handleButtonClick - Auth state:', { isAuthenticated, currentUser: { uid: currentUser?.uid, email: currentUser?.email } });
         if (!isAuthenticated) {
             actions.ui.showNotification({
                 type: 'error',
@@ -460,7 +419,7 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
         }
 
         setShowBugForm(true);
-    }, [isAuthenticated, activeSuite, canCreateBugs, hasActiveSubscription, actions.ui, currentUser?.email, currentUser?.uid]);
+    }, [isAuthenticated, activeSuite, canCreateBugs, hasActiveSubscription, actions.ui]);
 
     if (!mounted) {
         return null;
@@ -528,7 +487,6 @@ const BugReportButton = ({ className = "", onCreateBug }) => {
                                 setError={setError}
                                 isSubmitting={isSubmitting}
                                 onSubmit={handleManualSubmit}
-                                onAISubmit={handleSubmit}
                                 onClose={closeForm}
                                 suites={suites}
                                 activeSuite={activeSuite}

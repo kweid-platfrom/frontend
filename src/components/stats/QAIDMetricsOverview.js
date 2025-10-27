@@ -1,4 +1,4 @@
-// components/QAIDMetricsOverview.jsx - Fixed with AI Context Integration
+// components/QAIDMetricsOverview.jsx - Fixed with Firestore AI Metrics
 import React, { useEffect, useState } from 'react';
 import {
     TestTube,
@@ -19,57 +19,112 @@ import {
     AlertTriangle
 } from 'lucide-react';
 import { useAI } from '@/context/AIContext';
+import { useApp } from '@/context/AppProvider';
+import { calculateSuiteAIMetrics, getAIGeneratedAssetsCount } from '@/services/aiMetricsService';
 
 const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
     const [aiMetrics, setAIMetrics] = useState(null);
+    const [loadingAI, setLoadingAI] = useState(true);
+    const [aiGeneratedCount, setAiGeneratedCount] = useState(0);
     
-    // Get AI Context for real-time AI generation metrics
+    const { state } = useApp();
+    const activeSuiteId = state.suites?.activeSuite?.id;
+    
+    // Get AI Context for service status and real-time session data
     const {
         isInitialized,
         isHealthy,
         apiKeyConfigured,
-        tokensUsed,
-        totalCost,
-        operationsCount,
-        operationHistory
-    } = useAI();
+        tokensUsed: sessionTokens,
+        totalCost: sessionCost,
+        operationsCount: sessionOps    } = useAI();
 
-    // Calculate AI-specific metrics from operation history
+    // Load AI metrics from Firestore
     useEffect(() => {
-        if (operationHistory && operationHistory.length > 0) {
-            const testCaseGenerations = operationHistory.filter(op => op.type === 'test_cases');
-            const bugReportGenerations = operationHistory.filter(op => op.type === 'bug_report');
-            
-            const successfulGenerations = testCaseGenerations.filter(op => op.success).length;
-            const totalGenerations = testCaseGenerations.length;
-            
-            setAIMetrics({
-                totalAIGenerations: totalGenerations,
-                successfulAIGenerations: successfulGenerations,
-                aiGenerationSuccessRate: totalGenerations > 0 
-                    ? Math.round((successfulGenerations / totalGenerations) * 100) 
-                    : 0,
-                totalBugReports: bugReportGenerations.length,
-                aiTokensUsed: tokensUsed || 0,
-                aiTotalCost: totalCost || 0,
-                avgTestCasesPerGeneration: 5, // This would come from actual generation data
-                recentAIActivity: testCaseGenerations.length > 0
-            });
-        } else {
-            setAIMetrics({
-                totalAIGenerations: 0,
-                successfulAIGenerations: 0,
-                aiGenerationSuccessRate: 0,
-                totalBugReports: 0,
-                aiTokensUsed: 0,
-                aiTotalCost: 0,
-                avgTestCasesPerGeneration: 5,
-                recentAIActivity: false
-            });
-        }
-    }, [operationHistory, tokensUsed, totalCost]);
+        const loadAIMetrics = async () => {
+            if (!activeSuiteId) {
+                setAIMetrics(null);
+                setAiGeneratedCount(0);
+                setLoadingAI(false);
+                return;
+            }
 
-    if (loading) {
+            setLoadingAI(true);
+            try {
+                // Fetch AI-generated test cases count
+                const aiTestCasesCount = await getAIGeneratedAssetsCount(activeSuiteId, 'testCases');
+                setAiGeneratedCount(aiTestCasesCount);
+
+                // Fetch AI usage metrics
+                const result = await calculateSuiteAIMetrics(activeSuiteId, 30);
+                
+                if (result.success) {
+                    setAIMetrics({
+                        // From Firestore (persistent)
+                        totalAIGenerations: result.data.totalAIGenerations || 0,
+                        totalTestCasesGenerated: result.data.totalTestCasesGenerated || 0,
+                        totalBugReportsGenerated: result.data.totalBugReportsGenerated || 0,
+                        successfulOperations: result.data.successfulOperations || 0,
+                        failedOperations: result.data.failedOperations || 0,
+                        aiGenerationSuccessRate: result.data.overallSuccessRate || 0,
+                        totalTokensUsed: result.data.totalTokensUsed || 0,
+                        totalCost: result.data.totalCost || 0,
+                        avgTestCasesPerGeneration: result.data.averageTestCasesPerGeneration || 0,
+                        timeSavedHours: result.data.totalTimeSavedHours || 0,
+                        estimatedROI: result.data.estimatedROI || 0,
+                        // Session data
+                        sessionTokens: sessionTokens || 0,
+                        sessionCost: sessionCost || 0,
+                        sessionOps: sessionOps || 0,
+                        recentAIActivity: (result.data.totalAIGenerations || 0) > 0 || (sessionOps || 0) > 0
+                    });
+                } else {
+                    setAIMetrics({
+                        totalAIGenerations: 0,
+                        totalTestCasesGenerated: 0,
+                        totalBugReportsGenerated: 0,
+                        successfulOperations: 0,
+                        failedOperations: 0,
+                        aiGenerationSuccessRate: 0,
+                        totalTokensUsed: 0,
+                        totalCost: 0,
+                        avgTestCasesPerGeneration: 0,
+                        timeSavedHours: 0,
+                        estimatedROI: 0,
+                        sessionTokens: sessionTokens || 0,
+                        sessionCost: sessionCost || 0,
+                        sessionOps: sessionOps || 0,
+                        recentAIActivity: (sessionOps || 0) > 0
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading AI metrics:', error);
+                setAIMetrics({
+                    totalAIGenerations: 0,
+                    totalTestCasesGenerated: 0,
+                    totalBugReportsGenerated: 0,
+                    successfulOperations: 0,
+                    failedOperations: 0,
+                    aiGenerationSuccessRate: 0,
+                    totalTokensUsed: 0,
+                    totalCost: 0,
+                    avgTestCasesPerGeneration: 0,
+                    timeSavedHours: 0,
+                    estimatedROI: 0,
+                    sessionTokens: 0,
+                    sessionCost: 0,
+                    sessionOps: 0,
+                    recentAIActivity: false
+                });
+            } finally {
+                setLoadingAI(false);
+            }
+        };
+
+        loadAIMetrics();
+    }, [activeSuiteId, sessionTokens, sessionCost, sessionOps]);
+
+    if (loading || loadingAI) {
         return (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 {[...Array(8)].map((_, i) => (
@@ -154,7 +209,7 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
         totalTestCases: metrics.totalTestCases || 0,
         manualTestCases: metrics.manualTestCases || 0,
         automatedTestCases: metrics.automatedTestCases || 0,
-        aiGeneratedTestCases: metrics.aiGeneratedTestCases || 0,
+        aiGeneratedTestCases: aiGeneratedCount, // Use real count from Firestore
         testCasesWithTags: metrics.testCasesWithTags || 0,
         testCasesWithRecordings: metrics.testCasesWithRecordings || 0,
         testCasesLinkedToBugs: metrics.testCasesLinkedToBugs || 0,
@@ -177,18 +232,24 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
         negativeCaseCoverage: metrics.negativeCaseCoverage || 0
     };
 
-    // Use real AI metrics from context
+    // Use AI metrics from Firestore
     const ai = {
         totalAIGenerations: aiMetrics?.totalAIGenerations || 0,
-        successfulAIGenerations: aiMetrics?.successfulAIGenerations || 0,
+        totalTestCasesGenerated: aiMetrics?.totalTestCasesGenerated || 0,
+        successfulOperations: aiMetrics?.successfulOperations || 0,
         aiGenerationSuccessRate: aiMetrics?.aiGenerationSuccessRate || 0,
-        avgTestCasesPerAIGeneration: aiMetrics?.avgTestCasesPerGeneration || 5,
-        totalBugReports: aiMetrics?.totalBugReports || 0,
-        aiTokensUsed: aiMetrics?.aiTokensUsed || 0,
-        aiTotalCost: aiMetrics?.aiTotalCost || 0,
-        aiCostPerTestCase: aiMetrics?.totalAIGenerations > 0 
-            ? (aiMetrics.aiTotalCost / aiMetrics.totalAIGenerations)
-            : 0.05,
+        avgTestCasesPerGeneration: aiMetrics?.avgTestCasesPerGeneration || 0,
+        totalBugReports: aiMetrics?.totalBugReportsGenerated || 0,
+        totalTokensUsed: aiMetrics?.totalTokensUsed || 0,
+        totalCost: aiMetrics?.totalCost || 0,
+        aiCostPerGeneration: (aiMetrics?.totalAIGenerations || 0) > 0 
+            ? (aiMetrics?.totalCost || 0) / (aiMetrics?.totalAIGenerations || 1)
+            : 0,
+        timeSavedHours: aiMetrics?.timeSavedHours || 0,
+        estimatedROI: aiMetrics?.estimatedROI || 0,
+        sessionTokens: aiMetrics?.sessionTokens || 0,
+        sessionCost: aiMetrics?.sessionCost || 0,
+        sessionOps: aiMetrics?.sessionOps || 0,
         aiServiceAvailable: isInitialized && isHealthy && apiKeyConfigured,
         recentAIActivity: aiMetrics?.recentAIActivity || false
     };
@@ -299,7 +360,7 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                         icon={Brain}
                         color="purple"
                         subtitle={ai.aiServiceAvailable 
-                            ? "AI Generation Success + Contribution"
+                            ? `${ai.timeSavedHours.toFixed(1)}h saved • ${ai.estimatedROI.toFixed(0)}% ROI`
                             : "AI Service Not Available"}
                         warning={!ai.aiServiceAvailable}
                     />
@@ -347,8 +408,8 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                     icon={Bot}
                     color="purple"
                     subtitle={ai.aiServiceAvailable
-                        ? (ai.aiGenerationSuccessRate > 0 
-                            ? `${ai.aiGenerationSuccessRate}% success rate`
+                        ? (ai.totalAIGenerations > 0 
+                            ? `${ai.totalAIGenerations} generations • ${ai.aiGenerationSuccessRate.toFixed(0)}% success`
                             : 'No AI generations yet')
                         : 'AI service not configured'}
                     warning={!ai.aiServiceAvailable}
@@ -484,56 +545,48 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                 </div>
             </div>
 
-            {/* AI Generation Insights - Real-time from Context */}
+            {/* AI Generation Insights - From Firestore */}
             <div className="bg-card rounded-lg shadow-theme border border-border p-6">
                 <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center">
                     <Brain className="w-5 h-5 mr-2 text-purple-500" />
-                    AI Generation Insights (Real-time)
+                    AI Generation Insights
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="text-center p-4 bg-[rgb(var(--color-info)/0.1)] rounded-lg border border-[rgb(var(--color-info)/0.2)]">
                         <div className="text-2xl font-bold text-[rgb(var(--color-info))] mb-1">
                             {ai.totalAIGenerations}
                         </div>
-                        <div className="text-sm text-foreground">Total AI Generations</div>
+                        <div className="text-sm text-foreground">Total Generations</div>
                         <div className="text-xs text-muted-foreground mt-1">
-                            {ai.aiServiceAvailable
-                                ? (ai.totalAIGenerations > 0 
-                                    ? `${ai.successfulAIGenerations} successful`
-                                    : 'No AI generations yet')
-                                : 'Service not available'}
+                            {ai.totalTestCasesGenerated} test cases created
                         </div>
                     </div>
                     <div className="text-center p-4 bg-[rgb(var(--color-success)/0.1)] rounded-lg border border-[rgb(var(--color-success)/0.2)]">
                         <div className="text-2xl font-bold text-[rgb(var(--color-success))] mb-1">
-                            {ai.aiGenerationSuccessRate}%
+                            {ai.aiGenerationSuccessRate.toFixed(1)}%
                         </div>
                         <div className="text-sm text-foreground">Success Rate</div>
                         <div className="text-xs text-muted-foreground mt-1">
-                            {ai.aiServiceAvailable
-                                ? (ai.totalAIGenerations > 0 
-                                    ? 'AI generation efficiency'
-                                    : 'No data yet')
-                                : 'Configure API key'}
+                            {ai.successfulOperations}/{ai.totalAIGenerations || 1} successful
                         </div>
                     </div>
                     <div className="text-center p-4 bg-[rgb(var(--color-teal-50))] rounded-lg border border-[rgb(var(--color-teal-300)/0.2)]">
                         <div className="text-2xl font-bold text-teal-800 mb-1">
-                            {ai.aiTokensUsed.toLocaleString()}
+                            {ai.totalTokensUsed.toLocaleString()}
                         </div>
                         <div className="text-sm text-foreground">Tokens Used</div>
                         <div className="text-xs text-muted-foreground mt-1">
-                            Current session consumption
+                            Total consumption
                         </div>
                     </div>
                     <div className="text-center p-4 bg-[rgb(var(--color-warning)/0.1)] rounded-lg border border-[rgb(var(--color-warning)/0.2)]">
                         <div className="text-2xl font-bold text-[rgb(var(--color-warning))] mb-1">
-                            ${(ai.aiTotalCost).toFixed(4)}
+                            ${ai.totalCost.toFixed(4)}
                         </div>
-                        <div className="text-sm text-foreground">Total AI Cost</div>
+                        <div className="text-sm text-foreground">Total Cost</div>
                         <div className="text-xs text-muted-foreground mt-1">
                             {ai.totalAIGenerations > 0 
-                                ? `$${ai.aiCostPerTestCase.toFixed(4)}/generation`
+                                ? `${ai.aiCostPerGeneration.toFixed(4)}/generation`
                                 : 'No cost data yet'}
                         </div>
                     </div>
@@ -573,7 +626,7 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                         </div>
                         <div className="text-sm text-foreground">AI Contribution</div>
                         <div className="text-xs text-muted-foreground mt-1">
-                            AI-generated test cases
+                            {testCases.aiGeneratedTestCases} AI-generated
                         </div>
                     </div>
                     <div className="text-center">
@@ -639,7 +692,7 @@ const QAIDMetricsOverview = ({ metrics = {}, loading = false }) => {
                             </span>
                         </div>
                         <div className="text-xs text-purple-700">
-                            {ai.totalAIGenerations} generations • {ai.aiTokensUsed.toLocaleString()} tokens • ${ai.aiTotalCost.toFixed(4)} cost
+                            {ai.totalAIGenerations} generations • {ai.totalTokensUsed.toLocaleString()} tokens • ${ai.totalCost.toFixed(4)} cost • {ai.timeSavedHours.toFixed(1)}h saved
                         </div>
                     </div>
                 </div>

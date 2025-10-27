@@ -219,10 +219,10 @@ const BugDetailsModal = ({
         label: member.name || member.email?.split('@')[0] || 'Unknown',
     }));
 
-    const environmentOptions = ['production', 'staging', 'development', 'testing'].map(env => ({
-        value: env,
-        label: env.charAt(0).toUpperCase() + env.slice(1),
-    }));
+    // const environmentOptions = ['production', 'staging', 'development', 'testing'].map(env => ({
+    //     value: env,
+    //     label: env.charAt(0).toUpperCase() + env.slice(1),
+    // }));
 
     const sourceOptions = ['manual', 'automated', 'external'].map(source => ({
         value: source,
@@ -461,7 +461,7 @@ const BugDetailsModal = ({
                                                 </div>
                                                 <p className="text-xs text-muted-foreground mt-1">Priority (Auto-derived)</p>
                                             </div>
-                                            <div className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
+                                            {/* <div className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
                                                 <EditableField
                                                     field="environment"
                                                     value={editedBug.environment || 'Unknown'}
@@ -471,7 +471,7 @@ const BugDetailsModal = ({
                                                     {...editableFieldProps()}
                                                 />
                                                 <p className="text-xs text-muted-foreground mt-1">Environment</p>
-                                            </div>
+                                            </div> */}
                                             {/* ✅ FIXED: Sprint selector always shows, uses global state */}
                                             {safeSprints.length > 0 && (
                                                 <div className="bg-card border border-border rounded-lg p-3 sm:p-4 shadow-theme-sm hover:shadow-theme transition-shadow">
