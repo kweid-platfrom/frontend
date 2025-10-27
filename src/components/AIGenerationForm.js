@@ -34,8 +34,6 @@ const AIGenerationForm = ({
     generationSummary,
     onSaveSelected,
     onBackToEdit,
-    // AI Tracking props
-    aiProvider = 'gemini',
     aiModel = 'gemini-1.5-flash-latest',
     tokensUsed = 0,
     cost = 0,

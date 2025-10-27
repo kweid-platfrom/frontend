@@ -17,6 +17,9 @@ import {
 import { useApp } from '../../../context/AppProvider';
 import { useAI } from '../../../context/AIContext';
 import AIGenerationForm from '../../../components/AIGenerationForm';
+import { doc, setDoc, Timestamp } from 'firebase/firestore';
+import { db } from '../../../config/firebase';
+import { createAIUsageLog } from '../../../utils/aiMetadataHelper';
 // No need for metadata helpers - AIContext handles it
 
 const AIGenerationPage = () => {
@@ -258,10 +261,6 @@ const AIGenerationPage = () => {
             // Update Firestore usage log with saved asset IDs
             if (successCount > 0 && savedTestCaseIds.length > 0) {
                 try {
-                    const { doc, setDoc, Timestamp } = await import('firebase/firestore');
-                    const { db } = await import('../../../config/firebase');
-                    const { createAIUsageLog } = await import('../../../utils/aiMetadataHelper');
-                    
                     // Create complete usage log with asset IDs
                     const usageLog = createAIUsageLog({
                         operationId: `op_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -285,9 +284,9 @@ const AIGenerationPage = () => {
                         created_at: Timestamp.now()
                     });
 
-                    console.log('✅ AI usage logged to Firestore with asset IDs:', savedTestCaseIds);
+                    console.log('✅ AI usage logged to Firestore:', usageLog.id, 'with', savedTestCaseIds.length, 'assets');
                 } catch (logError) {
-                    console.error('Failed to log AI usage:', logError);
+                    console.error('❌ Failed to log AI usage:', logError);
                     // Don't fail the save operation
                 }
             }

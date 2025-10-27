@@ -24,14 +24,6 @@ export const DashboardContent = ({
     filters,
     activeSuite,
 }) => {
-    const getDateRange = () => {
-        switch (filters.timeRange) {
-            case '7d': return 7;
-            case '30d': return 30;
-            case '90d': return 90;
-            default: return 30;
-        }
-    };
 
     const renderTabContent = () => {
         switch (activeTab) {

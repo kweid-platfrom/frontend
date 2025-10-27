@@ -316,7 +316,6 @@ const ThemeSection = () => {
 // AI Settings Component - FIXED VERSION
 const AISettingsSection = () => {
     const { actions } = useApp();
-    const [showApiKey, setShowApiKey] = useState(false);
     const [availableModels, setAvailableModels] = useState([]);
     const [currentModelInfo, setCurrentModelInfo] = useState(null);
     const [settings, setSettings] = useState({
