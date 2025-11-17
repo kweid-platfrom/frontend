@@ -1,10 +1,10 @@
-// HeaderButtons.jsx - Added Generate Report Button
+// HeaderButtons.jsx - Replaced Bug Report Button with AI Bug Generator
 import React, { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Play, Target, FileText, MoreHorizontal, Plus as PlusIcon, Upload, Sparkles, Bug, ChevronDown } from 'lucide-react';
+import { Play, Target, FileText, MoreHorizontal, Plus as PlusIcon, Upload, Sparkles, ChevronDown } from 'lucide-react';
 import { DocumentTextIcon } from '@heroicons/react/24/outline';
 import { Button } from '../../ui/button';
-import BugReportButton from '../../modals/BugReportButton';
+import AIBugGeneratorButton from '../../modals/AIBugGeneratorButton';
 import ScreenRecorderButton from '../../recorder/ScreenRecorderButton';
 
 const HeaderButtons = ({
@@ -12,11 +12,10 @@ const HeaderButtons = ({
     onCreateDocument,
     activeSuite,
     firestoreService,
-    setShowBugForm,
     onCreateTestCase,
     onImportTestCases,
     onGenerateTestCases,
-    onGenerateReport, // NEW PROP
+    onGenerateReport,
     disabled = false
 }) => {
     const router = useRouter();
@@ -151,13 +150,6 @@ const HeaderButtons = ({
         }
     };
 
-    const handleBugReport = () => {
-        setShowMobileMenu(false);
-        if (setShowBugForm) {
-            setShowBugForm(true);
-        }
-    };
-
     const handleCreateSprint = () => {
         setShowMobileMenu(false);
         if (onCreateSprint) {
@@ -170,6 +162,13 @@ const HeaderButtons = ({
         if (onCreateDocument) {
             onCreateDocument();
         }
+    };
+
+    const handleBugCreated = (result) => {
+        // Close mobile menu if open
+        setShowMobileMenu(false);
+        // You can add additional logic here if needed
+        console.log('AI Bug created:', result);
     };
 
     return (
@@ -271,17 +270,6 @@ const HeaderButtons = ({
                                 >
                                     <Sparkles className="h-4 w-4 mr-3 flex-shrink-0" />
                                     <span className="flex-1 text-left">Generate with AI</span>
-                                </button>
-
-                                <div className="border-t border-border my-2"></div>
-
-                                <button
-                                    onClick={handleBugReport}
-                                    disabled={disabled}
-                                    className="w-full flex items-center px-4 py-3 text-sm text-foreground hover:bg-accent transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <Bug className="h-4 w-4 mr-3 flex-shrink-0" />
-                                    <span className="flex-1 text-left">Report Bug</span>
                                 </button>
                             </div>
                         </div>
@@ -393,12 +381,9 @@ const HeaderButtons = ({
                     )}
                 </div>
 
-                <BugReportButton
-                    variant="ghost"
-                    disabled={disabled}
-                    onClick={handleBugReport}
-                    className="text-foreground hover:bg-accent/50 flex-shrink-0"
-                    iconOnly={true}
+                <AIBugGeneratorButton
+                    className="!px-2 !py-1.5"
+                    onBugCreated={handleBugCreated}
                 />
             </div>
 
@@ -500,11 +485,8 @@ const HeaderButtons = ({
                     )}
                 </div>
 
-                <BugReportButton
-                    variant="ghost"
-                    disabled={disabled}
-                    onClick={handleBugReport}
-                    className="text-foreground hover:bg-accent/50"
+                <AIBugGeneratorButton
+                    onBugCreated={handleBugCreated}
                 />
             </div>
         </div>

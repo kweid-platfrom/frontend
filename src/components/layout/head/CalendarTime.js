@@ -1,10 +1,10 @@
-// CalendarTime.jsx - Fixed time display layout
+// CalendarDate.jsx - Date display with calendar
 import { useState, useRef, useEffect } from 'react';
-import { Calendar, Clock } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { Button } from '../../ui/button';
 
 const CalendarTime = ({ disabled = false }) => {
-    const [currentDateTime, setCurrentDateTime] = useState(new Date());
+    const [currentDate, setCurrentDate] = useState(new Date());
     const [showCalendar, setShowCalendar] = useState(false);
     const [calendarPosition, setCalendarPosition] = useState({
         top: 0,
@@ -14,15 +14,6 @@ const CalendarTime = ({ disabled = false }) => {
 
     const calendarRef = useRef(null);
     const calendarButtonRef = useRef(null);
-
-    // Update current time every second
-    useEffect(() => {
-        const timer = setInterval(() => {
-            setCurrentDateTime(new Date());
-        }, 1000);
-
-        return () => clearInterval(timer);
-    }, []);
 
     const calculatePosition = () => {
         if (calendarButtonRef.current) {
@@ -69,18 +60,6 @@ const CalendarTime = ({ disabled = false }) => {
     }, [disabled]);
 
     // Format functions
-    const formatTime = (date) => {
-        const timeStr = date.toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-            hour12: true
-        });
-
-        const [time, period] = timeStr.split(' ');
-        return { time, period };
-    };
-
     const formatDate = (date) => {
         return date.toLocaleDateString('en-US', {
             weekday: 'short',
@@ -119,7 +98,6 @@ const CalendarTime = ({ disabled = false }) => {
     };
 
     const calendarData = generateCalendarDays();
-    const { time, period } = formatTime(currentDateTime);
 
     return (
         <>
@@ -133,24 +111,10 @@ const CalendarTime = ({ disabled = false }) => {
                     onClick={toggleCalendar}
                     disabled={disabled}
                     className="text-foreground hover:bg-accent/50 transition-colors flex-shrink-0"
-                    title={formatDate(currentDateTime)}
+                    title={formatDate(currentDate)}
                 >
                     <Calendar className="h-4 w-4 text-primary" />
                 </Button>
-
-                {/* Mobile Time Display - Compact */}
-                <div className="flex items-center px-2 py-1 rounded-md bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 flex-shrink-0">
-                    <div className="flex items-center space-x-1.5">
-                        <div className="relative flex-shrink-0">
-                            <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
-                            <div className="absolute inset-0 w-1.5 h-1.5 bg-primary rounded-full animate-ping opacity-75"></div>
-                        </div>
-                        <Clock className="h-3 w-3 text-primary/80 flex-shrink-0" />
-                        <div className="font-mono text-xs font-medium text-primary whitespace-nowrap">
-                            <span className="tabular-nums">{time.split(':').slice(0, 2).join(':')} {period}</span>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             {/* Tablet Layout (sm to lg) */}
@@ -164,22 +128,8 @@ const CalendarTime = ({ disabled = false }) => {
                     leftIcon={<Calendar className="h-4 w-4 text-primary flex-shrink-0" />}
                     className="text-foreground hover:bg-accent/50 transition-colors flex-shrink-0"
                 >
-                    <span className="text-sm">{formatDateMobile(currentDateTime)}</span>
+                    <span className="text-sm">{formatDateMobile(currentDate)}</span>
                 </Button>
-
-                {/* Tablet Time Display - Single line layout */}
-                <div className="flex items-center px-2.5 py-1.5 rounded-md bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 shadow-sm flex-shrink-0 min-w-0">
-                    <div className="flex items-center space-x-1.5 min-w-0">
-                        <div className="relative flex-shrink-0">
-                            <div className="w-2 h-2 bg-primary rounded-full"></div>
-                            <div className="absolute inset-0 w-2 h-2 bg-primary rounded-full animate-ping opacity-75"></div>
-                        </div>
-                        <Clock className="h-3.5 w-3.5 text-primary/80 flex-shrink-0" />
-                        <div className="font-mono text-sm font-medium text-primary whitespace-nowrap">
-                            <span className="tabular-nums">{`${time} ${period}`}</span>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             {/* Desktop Layout (lg+) */}
@@ -192,23 +142,8 @@ const CalendarTime = ({ disabled = false }) => {
                     leftIcon={<Calendar className="h-4 w-4 text-primary" />}
                     className="text-foreground hover:bg-accent/50 transition-colors"
                 >
-                    {formatDate(currentDateTime)}
+                    {formatDate(currentDate)}
                 </Button>
-
-                <div className="flex items-center px-3 py-1.5 rounded-md bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 shadow-sm">
-                    <div className="flex items-center space-x-2">
-                        <div className="relative">
-                            <div className="w-2 h-2 bg-primary rounded-full"></div>
-                            <div className="absolute inset-0 w-2 h-2 bg-primary rounded-full animate-ping opacity-75"></div>
-                        </div>
-                        <Clock className="h-3.5 w-3.5 text-primary/80" />
-                        <div className="font-mono text-sm font-medium text-primary tracking-wider">
-                            <span className="inline-block w-[95px] text-center tabular-nums">
-                                {`${time} ${period}`}
-                            </span>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             {/* Calendar Dropdown */}

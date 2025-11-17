@@ -36,7 +36,7 @@ const AppHeader = ({
     const router = useRouter();
 
     // Extract state from context
-    const { isAuthenticated, currentUser } = state.auth;
+    const { isAuthenticated, currentUser, userProfile } = state.auth;
     const { testSuites, activeSuite, hasCreatedSuite } = state.suites;
     const { accountType, userRole } = state.subscription;
     const { notifications } = state.notifications || { notifications: [] };
@@ -46,7 +46,7 @@ const AppHeader = ({
     const [showNotifications, setShowNotifications] = useState(false);
     const [showCreateSprintModal, setShowCreateSprintModal] = useState(false);
     const [showGenerateReportModal, setShowGenerateReportModal] = useState(false); // NEW STATE
-    
+
     // Add missing state for test case modals
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -171,7 +171,7 @@ const AppHeader = ({
         try {
             // Call your report generation service/API here
             // For example: await actions.reports.generateReport(reportData);
-            
+
             actions.ui.showNotification('success', `Report "${reportData.name}" generated successfully!`, 3000);
             setShowGenerateReportModal(false);
         } catch (error) {
@@ -275,7 +275,7 @@ const AppHeader = ({
 
         actions.ui.showNotification('success', 'Test cases imported successfully!', 3000);
         setIsImportModalOpen(false);
-        
+
         // Refresh test cases if action exists
         if (actions.testCases?.fetchTestCases) {
             actions.testCases.fetchTestCases(activeSuite.id);
@@ -375,11 +375,22 @@ const AppHeader = ({
                             {/* Add User Button */}
                             <div className="flex-shrink-0">
                                 <AddUserButton
-                                    accountType={accountType}
-                                    userRole={userRole}
-                                    currentUser={currentUser}
-                                    actions={actions}
-                                    disabled={disabled}
+                                    accountType={userProfile?.accountType} // 'individual' or 'organization'
+                                    userRole={userProfile?.role} // 'admin', 'member', etc.
+                                    actions={actions} // Your notification actions
+                                    disabled={false}
+
+                                    // Props for TeamInviteFormMain
+                                    userEmail={currentUser?.email}
+                                    organizationName={userProfile?.organizationName}
+                                    organizationId={userProfile?.organizationId}
+                                    organizationSuites={userProfile?.organizationSuites || []}
+
+                                    // Optional callback when invites are sent successfully
+                                    onInviteSuccess={(results) => {
+                                        console.log('Invites sent:', results);
+                                        // Refresh team member list, update UI, etc.
+                                    }}
                                 />
                             </div>
 
@@ -516,8 +527,8 @@ const AppHeader = ({
                                             <div
                                                 key={notification.id}
                                                 className={`p-3 rounded-lg border transition-colors ${notification.read
-                                                        ? 'bg-secondary border-border'
-                                                        : 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800'
+                                                    ? 'bg-secondary border-border'
+                                                    : 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800'
                                                     }`}
                                             >
                                                 <div className="flex items-start justify-between">

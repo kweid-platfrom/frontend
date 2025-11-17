@@ -1,9 +1,10 @@
 // components/SummaryCards.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { TestTube, CheckCircle, Target, AlertTriangle, Bot } from 'lucide-react';
 import { BugAntIcon } from '@heroicons/react/24/outline';
 import { useApp } from '@/context/AppProvider';
 import { getAIGeneratedAssetsCount } from '@/services/aiMetricsService';
+import { calculateSprintProgress } from '@/utils/sprintUtils';
 
 export const SummaryCards = ({ summaryStats, dataStatus }) => {
     const { state } = useApp();
@@ -11,6 +12,18 @@ export const SummaryCards = ({ summaryStats, dataStatus }) => {
     const [loadingAiCount, setLoadingAiCount] = useState(true);
 
     const activeSuiteId = state.suites?.activeSuite?.id;
+    const activeSprint = state?.sprints?.activeSprint;
+
+    // Get all assets from global state
+    const allTestCases = state?.testCases?.testCases || [];
+    const allBugs = state?.bugs?.bugs || [];
+    const allRecommendations = state?.recommendations?.recommendations || [];
+
+    // Calculate sprint progress using utility
+    const sprintProgress = useMemo(() => {
+        if (!activeSprint) return 0;
+        return calculateSprintProgress(activeSprint, allTestCases, allBugs, allRecommendations);
+    }, [activeSprint, allTestCases, allBugs, allRecommendations]);
 
     useEffect(() => {
         const loadAIGeneratedCount = async () => {
@@ -41,7 +54,7 @@ export const SummaryCards = ({ summaryStats, dataStatus }) => {
         executionCount: summaryStats?.executionCount || 0,
         activeBugs: summaryStats?.activeBugs || 0,
         criticalIssues: summaryStats?.criticalBugs || summaryStats?.criticalIssues || 0,
-        sprintProgress: summaryStats?.sprintProgress || 0,
+        sprintProgress: sprintProgress, // Using calculated value from utility
         aiGeneratedTestCases: aiGeneratedCount,
         passCount: summaryStats?.passCount || 0,
         failCount: summaryStats?.failCount || 0,
@@ -101,12 +114,21 @@ export const SummaryCards = ({ summaryStats, dataStatus }) => {
                     {getStatusBadge(dataStatus?.bugs)}
                 </div>
                 
-                {/* Sprint Progress */}
+                {/* Sprint Progress - Now using utility calculation */}
                 <div className="bg-info/10 rounded-lg p-4 border border-info/20 relative">
                     <Target className="absolute top-2 right-2 w-4 h-4 text-info" />
                     <div className="text-2xl font-bold text-info">{stats.sprintProgress}%</div>
                     <div className="text-sm text-info">Sprint Progress</div>
-                    {getStatusBadge(dataStatus?.sprints)}
+                    {activeSprint && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                            {activeSprint.name}
+                        </div>
+                    )}
+                    {!activeSprint && (
+                        <div className="text-xs text-muted-foreground mt-1">
+                            No active sprint
+                        </div>
+                    )}
                 </div>
                 
                 {/* AI Generated Tests */}

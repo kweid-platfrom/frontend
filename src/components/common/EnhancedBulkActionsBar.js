@@ -26,10 +26,12 @@ const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message, confirmText
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start space-x-3">
-          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${confirmColor === 'red' ? 'bg-red-100' : 'bg-yellow-100'
-            }`}>
-            <AlertTriangle className={`w-6 h-6 ${confirmColor === 'red' ? 'text-red-600' : 'text-yellow-600'
-              }`} />
+          <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center ${
+            confirmColor === 'red' ? 'bg-red-100' : 'bg-yellow-100'
+          }`}>
+            <AlertTriangle className={`w-6 h-6 ${
+              confirmColor === 'red' ? 'text-red-600' : 'text-yellow-600'
+            }`} />
           </div>
           <div className="flex-1">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
@@ -46,10 +48,11 @@ const ConfirmDialog = ({ isOpen, onClose, onConfirm, title, message, confirmText
           </button>
           <button
             onClick={onConfirm}
-            className={`px-4 py-2 text-sm font-medium text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-1 transition-colors ${confirmColor === 'red'
-              ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
-              : 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500'
-              }`}
+            className={`px-4 py-2 text-sm font-medium text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-1 transition-colors ${
+              confirmColor === 'red'
+                ? 'bg-red-600 hover:bg-red-700 focus:ring-red-500'
+                : 'bg-yellow-600 hover:bg-yellow-700 focus:ring-yellow-500'
+            }`}
           >
             {confirmText}
           </button>
@@ -277,7 +280,6 @@ const generateAssetActionConfig = (assetType, sprints = [], users = [], modules 
       ]
     },
 
-    // ✅ UPDATED: Recordings config - NO sprint addition, only bug linking
     recordings: {
       icon: 'Video',
       color: 'purple',
@@ -292,7 +294,6 @@ const generateAssetActionConfig = (assetType, sprints = [], users = [], modules 
         {
           name: 'linking',
           actions: [
-            // Recordings are evidence - they get linked to bugs, not sprints
             ...(bugOptions.length > 0 ? [{
               id: 'link-to-bug',
               label: 'Link to Bug',
@@ -544,7 +545,12 @@ const EnhancedBulkActionsBar = ({
   const { state } = useApp();
   const [openDropdowns, setOpenDropdowns] = useState({});
   const [portalContainer, setPortalContainer] = useState(null);
-  const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, action: null, config: null, option: null });
+  const [confirmDialog, setConfirmDialog] = useState({ 
+    isOpen: false, 
+    action: null, 
+    config: null, 
+    option: null 
+  });
 
   useEffect(() => {
     let container = document.getElementById(portalId);
@@ -576,26 +582,33 @@ const EnhancedBulkActionsBar = ({
     return state.modules?.modules || [];
   }, [state.modules]);
 
+  const bugs = useMemo(() => {
+    return state.bugs?.bugs || [];
+  }, [state.bugs]);
+
   const config = useMemo(() => {
     if (actionGroups.length > 0) {
       return { groups: actionGroups };
     }
 
     if (assetType) {
-      return generateAssetActionConfig(assetType, sprints, teamMembers, modules);
+      return generateAssetActionConfig(assetType, sprints, teamMembers, modules, bugs);
     }
 
     return { groups: [] };
-  }, [assetType, actionGroups, sprints, teamMembers, modules]);
+  }, [assetType, actionGroups, sprints, teamMembers, modules, bugs]);
 
   if (!portalContainer || config.groups.length === 0 || selectedItems.length === 0) {
     return null;
   }
 
   const handleAction = async (actionId, actionConfig, selectedOption = null) => {
+    console.log('🎯 handleAction called:', { actionId, actionConfig, selectedOption });
+    
     const requiresConfirm = actionConfig.requiresConfirm || actionConfig.destructive;
 
     if (requiresConfirm) {
+      console.log('📋 Setting confirm dialog for:', actionId);
       setConfirmDialog({
         isOpen: true,
         action: actionId,
@@ -605,38 +618,57 @@ const EnhancedBulkActionsBar = ({
       return;
     }
 
-    executeAction(actionId, actionConfig, selectedOption);
+    // Execute action directly if no confirmation needed
+    console.log('▶️ Executing action directly:', actionId);
+    await executeAction(actionId, actionConfig, selectedOption);
   };
 
   const executeAction = async (actionId, actionConfig, selectedOption = null) => {
+    console.log('⚡ executeAction called:', { actionId, selectedItems, selectedOption });
+    
     try {
+      // Call the onAction prop with all necessary parameters
       await onAction(actionId, selectedItems, actionConfig, selectedOption);
+      
+      // Clear selection and close dropdowns after successful action
       onClearSelection();
       setOpenDropdowns({});
     } catch (error) {
-      console.error('Action failed:', error);
+      console.error('❌ Action execution failed:', error);
+      // Don't clear selection on error so user can retry
     }
   };
 
-  const handleConfirmDialogConfirm = () => {
+  const handleConfirmDialogConfirm = async () => {
     const { action, config, option } = confirmDialog;
+    console.log('✅ Confirm dialog confirmed:', { action, config, option });
+    
+    // Close dialog first
     setConfirmDialog({ isOpen: false, action: null, config: null, option: null });
-    executeAction(action, config, option);
+    
+    // Then execute the action
+    await executeAction(action, config, option);
   };
 
   const handleConfirmDialogClose = () => {
+    console.log('❌ Confirm dialog cancelled');
     setConfirmDialog({ isOpen: false, action: null, config: null, option: null });
   };
 
   const handleDropdownSelect = (actionId, selectedOption) => {
+    console.log('📋 Dropdown selected:', { actionId, selectedOption });
+    
     const action = config.groups
       .flatMap(group => group.actions)
       .find(act => act.id === actionId);
 
     if (action) {
       handleAction(actionId, action, selectedOption);
+    } else {
+      console.warn('⚠️ Action not found:', actionId);
     }
 
+    // Close the dropdown
     setOpenDropdowns(prev => ({ ...prev, [actionId]: false }));
   };
 
@@ -645,6 +677,7 @@ const EnhancedBulkActionsBar = ({
   };
 
   const handleCancel = () => {
+    console.log('🚫 Bulk action cancelled');
     onClearSelection();
     setOpenDropdowns({});
   };
@@ -695,10 +728,11 @@ const EnhancedBulkActionsBar = ({
                         <button
                           onClick={() => handleAction(action.id, action)}
                           disabled={isLoading}
-                          className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${action.destructive || action.requiresConfirm
-                            ? 'text-red-600 border border-red-300 hover:bg-red-50 focus:ring-red-500'
-                            : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-blue-500'
-                            } focus:outline-none focus:ring-2 focus:ring-offset-1`}
+                          className={`inline-flex items-center justify-center w-8 h-8 sm:w-10 sm:h-10 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+                            action.destructive || action.requiresConfirm
+                              ? 'text-red-600 border border-red-300 hover:bg-red-50 focus:ring-red-500'
+                              : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 focus:ring-blue-500'
+                          } focus:outline-none focus:ring-2 focus:ring-offset-1`}
                         >
                           <ActionIcon className={`w-3 h-3 sm:w-4 sm:h-4 ${isLoading ? 'animate-spin' : ''}`} />
                         </button>

@@ -86,8 +86,6 @@ export const useRecordings = () => {
   // Start recording
   const startRecording = useCallback(async () => {
     try {
-      console.log('🎬 Starting recording...');
-      
       // Request screen capture
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: { 
@@ -122,7 +120,6 @@ export const useRecordings = () => {
       };
 
       mediaRecorder.onstop = () => {
-        console.log('🎬 Recording stopped, processing...');
         restoreConsole();
 
         const blob = new Blob(chunksRef.current, { type: 'video/webm' });
@@ -130,14 +127,6 @@ export const useRecordings = () => {
         // Use ref value instead of state to avoid stale closure
         const duration = timerRef.current ? 
           Math.floor((Date.now() - timerRef.startTime) / 1000) : 0;
-
-        console.log('📹 Creating preview with:', {
-          blobSize: blob.size,
-          duration,
-          consoleLogsCount: consoleLogsRef.current.length,
-          networkLogsCount: networkLogsRef.current.length,
-          issuesCount: detectedIssuesRef.current.length
-        });
 
         setPreviewData({
           blob,
@@ -167,7 +156,6 @@ export const useRecordings = () => {
 
       // Handle stream end (user clicks browser's stop sharing button)
       stream.getVideoTracks()[0].addEventListener('ended', () => {
-        console.log('🎬 Stream ended by user');
         if (mediaRecorderRef.current && 
             mediaRecorderRef.current.state !== 'inactive') {
           mediaRecorderRef.current.stop();
@@ -201,12 +189,9 @@ export const useRecordings = () => {
         duration: 3000
       });
 
-      console.log('✅ Recording started successfully');
       return { success: true };
 
     } catch (error) {
-      console.error('❌ Failed to start recording:', error);
-      
       actions.ui?.showNotification?.({
         id: 'recording-error',
         type: 'error',
@@ -231,7 +216,6 @@ export const useRecordings = () => {
         isPaused: true,
         status: 'paused'
       }));
-      console.log('⏸️ Recording paused');
     }
   }, []);
 
@@ -265,8 +249,6 @@ export const useRecordings = () => {
           status: 'recording'
         };
       });
-      
-      console.log('▶️ Recording resumed');
     }
   }, []);
 
@@ -274,7 +256,6 @@ export const useRecordings = () => {
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && 
         mediaRecorderRef.current.state !== 'inactive') {
-      console.log('🛑 Stopping recording...');
       clearInterval(timerRef.current);
       mediaRecorderRef.current.stop();
     }
@@ -289,13 +270,10 @@ export const useRecordings = () => {
       return null;
     });
     setHasPreview(false);
-    console.log('🗑️ Preview cleared');
   }, []);
 
   // Cleanup - NO DEPENDENCIES to prevent infinite loops
   const cleanup = useCallback(() => {
-    console.log('🧹 Cleaning up recording resources...');
-    
     // Stop recording if active
     if (mediaRecorderRef.current && 
         mediaRecorderRef.current.state !== 'inactive') {
@@ -336,8 +314,6 @@ export const useRecordings = () => {
       status: 'idle'
     });
     setHasPreview(false);
-
-    console.log('✅ Cleanup complete');
   }, []); // Empty dependencies - cleanup should only access refs and use state callbacks
 
   // Create recording (save to Firestore)
@@ -356,7 +332,6 @@ export const useRecordings = () => {
       const result = await actions.recordings.createRecording(recordingData, activeSuite.id);
       return result;
     } catch (error) {
-      console.error('Failed to create recording:', error);
       return { success: false, error };
     }
   }, [activeSuite, actions]);
@@ -371,7 +346,6 @@ export const useRecordings = () => {
       const result = await actions.recordings.deleteRecording(recordingId, activeSuite.id);
       return result;
     } catch (error) {
-      console.error('Failed to delete recording:', error);
       return { success: false, error };
     }
   }, [activeSuite, actions]);
@@ -386,7 +360,6 @@ export const useRecordings = () => {
       const result = await actions.linking.linkRecordingToBug?.(recordingId, bugId, activeSuite.id);
       return result || { success: false, error: { message: 'Method not available' } };
     } catch (error) {
-      console.error('Failed to link recording to bug:', error);
       return { success: false, error };
     }
   }, [activeSuite, actions]);
@@ -401,7 +374,6 @@ export const useRecordings = () => {
       const result = await actions.bugs.createBug?.(bugData, activeSuite.id);
       return result || { success: false, error: { message: 'Method not available' } };
     } catch (error) {
-      console.error('Failed to create bug:', error);
       return { success: false, error };
     }
   }, [activeSuite, actions]);

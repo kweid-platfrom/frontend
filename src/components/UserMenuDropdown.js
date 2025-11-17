@@ -12,7 +12,7 @@ import {
     ArchiveBoxIcon
 } from '@heroicons/react/24/outline';
 
-const UserMenuDropdown = ({ setShowUserMenu }) => {
+const UserMenuDropdown = ({ setShowUserMenu, handleSignOut }) => {
     const router = useRouter();
     const {
         state,
@@ -71,38 +71,10 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
         };
     };
 
-    const handleSignOut = async () => {
-        try {
-            setShowUserMenu(false);
-            actions.ui.showNotification?.({
-                id: 'signing-out',
-                type: 'info',
-                message: 'Signing out...',
-                duration: 2000,
-            });
-            await actions.auth.logout();
-            actions.ui.showNotification?.({
-                id: 'signed-out',
-                type: 'success',
-                message: 'Successfully signed out',
-                duration: 3000,
-            });
-        } catch (error) {
-            console.error('Sign out error:', error);
-            actions.ui.showNotification?.({
-                id: 'signout-error',
-                type: 'error',
-                message: 'Failed to sign out',
-                description: error.message,
-                duration: 5000,
-            });
-        }
-    };
-
     const handleSupport = () => {
         setShowUserMenu(false);
         router.push('/support');
-        actions.ui.showNotification?.({
+        actions?.ui?.showNotification?.({
             id: 'support-opened',
             type: 'info',
             message: 'Opening support page...',
@@ -113,7 +85,7 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
     const handleProfile = () => {
         setShowUserMenu(false);
         router.push('/profile-settings');
-        actions.ui.showNotification?.({
+        actions?.ui?.showNotification?.({
             id: 'profile-opened',
             type: 'info',
             message: 'Opening profile settings...',
@@ -124,7 +96,7 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
     const handleArchiveTrash = () => {
         setShowUserMenu(false);
         router.push('/archive-trash');
-        actions.ui.showNotification?.({
+        actions?.ui?.showNotification?.({
             id: 'archive-opened',
             type: 'info',
             message: 'Opening archive & trash...',
@@ -190,11 +162,6 @@ const UserMenuDropdown = ({ setShowUserMenu }) => {
                         </div>
                     )}
                 </div>
-
-                {/* Theme Switcher */}
-                {/* <div className="px-3 flex justify-center">
-                    <ThemeToggle variant="menu" hideText onlyIcons />
-                </div> */}
 
                 {/* Theme Switcher */}
                 <div className="px-3 flex justify-center">

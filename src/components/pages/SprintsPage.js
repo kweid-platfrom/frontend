@@ -18,6 +18,13 @@ import { useApp } from '../../context/AppProvider';
 import CreateSprintModal from '../modals/CreateSprintModal';
 import SprintDashboard from '../SprintDashboard';
 import EnhancedBulkActionsBar from '../common/EnhancedBulkActionsBar';
+import { 
+    calculateSprintProgress, 
+    getSprintAssetCounts,
+    formatDate,
+    getDaysRemaining,
+    getSprintStatusInfo
+} from '../../utils/sprintUtils';
 
 const SprintsPage = () => {
     const { state, actions } = useApp();
@@ -35,6 +42,22 @@ const SprintsPage = () => {
     
     const lastSuiteIdRef = useRef(null);
 
+    // Get all assets from global state
+    const allTestCases = state?.testCases?.testCases || [];
+    const allBugs = state?.bugs?.bugs || [];
+    const allRecommendations = state?.recommendations?.recommendations || [];
+
+    // Debug logging
+    useEffect(() => {
+        console.log('🔍 SprintsPage mounted with:', {
+            hasLoadingActions: typeof setLoadingActions === 'function',
+            loadingActionsCount: loadingActions.length,
+            selectedItemsCount: selectedItems.length,
+            activeSuiteId: activeSuite?.id,
+            sprintsCount: sprints.length
+        });
+    }, [loadingActions, selectedItems, activeSuite, sprints]);
+
     useEffect(() => {
         if (activeSuite?.id !== lastSuiteIdRef.current) {
             lastSuiteIdRef.current = activeSuite?.id;
@@ -47,36 +70,24 @@ const SprintsPage = () => {
     }, [activeSuite?.id, view]);
 
     const getStatusInfo = (status) => {
+        const info = getSprintStatusInfo(status);
+        let icon;
         switch (status) {
             case 'active':
-                return { icon: Play, color: 'text-green-600', bgColor: 'bg-green-100', label: 'Active' };
+                icon = Play;
+                break;
             case 'completed':
-                return { icon: CheckCircle, color: 'text-blue-600', bgColor: 'bg-blue-100', label: 'Completed' };
+                icon = CheckCircle;
+                break;
             case 'on-hold':
-                return { icon: Pause, color: 'text-yellow-600', bgColor: 'bg-yellow-100', label: 'On Hold' };
+                icon = Pause;
+                break;
             case 'planning':
             default:
-                return { icon: Clock, color: 'text-gray-600', bgColor: 'bg-gray-100', label: 'Planning' };
+                icon = Clock;
+                break;
         }
-    };
-
-    const formatDate = (date) => {
-        if (!date) return '';
-        const d = typeof date === 'string' ? new Date(date) : date;
-        return d.toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric',
-            year: 'numeric'
-        });
-    };
-
-    const getDaysRemaining = (endDate) => {
-        if (!endDate) return null;
-        const end = typeof endDate === 'string' ? new Date(endDate) : endDate;
-        const today = new Date();
-        const diffTime = end - today;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays;
+        return { ...info, icon };
     };
 
     const filteredSprints = sprints.filter(sprint => {
@@ -128,93 +139,186 @@ const SprintsPage = () => {
     };
 
     const handleBulkAction = async (actionId, selectedIds, actionConfig, selectedOption) => {
-        if (!activeSuite?.id) return;
-
         console.log('🎯 Bulk action triggered:', {
             actionId,
             selectedIds,
             selectedOption,
-            suiteId: activeSuite.id
+            suiteId: activeSuite?.id,
+            hasSetLoadingActions: typeof setLoadingActions === 'function',
+            actionConfig
         });
 
-        setLoadingActions(prev => [...prev, actionId]);
+        // Validation checks
+        if (!activeSuite?.id) {
+            console.error('❌ No active suite ID');
+            actions.ui?.showNotification?.({
+                id: 'no-suite-error',
+                type: 'error',
+                message: 'No active suite selected',
+                duration: 3000
+            });
+            return;
+        }
+
+        if (!selectedIds || selectedIds.length === 0) {
+            console.error('❌ No items selected');
+            return;
+        }
+
+        if (!actions.sprints) {
+            console.error('❌ Sprint actions not available');
+            actions.ui?.showNotification?.({
+                id: 'actions-unavailable',
+                type: 'error',
+                message: 'Sprint actions are not available',
+                duration: 3000
+            });
+            return;
+        }
+
+        console.log('✅ Available sprint actions:', Object.keys(actions.sprints));
+
+        // Add action to loading state
+        setLoadingActions(prev => {
+            console.log('📝 Adding to loading actions:', actionId, 'Current:', prev);
+            return [...prev, actionId];
+        });
 
         try {
+            let successCount = 0;
+            let failCount = 0;
+
             switch (actionId) {
                 case 'delete':
                     console.log('🗑️ Deleting sprints:', selectedIds);
-                    for (const sprintId of selectedIds) {
-                        const result = await actions.sprints.deleteSprint(sprintId, activeSuite.id);
-                        console.log(`Delete result for ${sprintId}:`, result);
+                    if (!actions.sprints?.deleteSprint) {
+                        throw new Error('deleteSprint action not available');
                     }
-                    actions.ui?.showNotification?.({
-                        id: 'bulk-delete-success',
-                        type: 'success',
-                        message: `${selectedIds.length} sprint(s) deleted successfully`,
-                        duration: 3000
-                    });
+                    for (const sprintId of selectedIds) {
+                        try {
+                            const result = await actions.sprints.deleteSprint(sprintId, activeSuite.id);
+                            console.log(`Delete result for ${sprintId}:`, result);
+                            if (result?.success !== false) {
+                                successCount++;
+                            } else {
+                                failCount++;
+                            }
+                        } catch (err) {
+                            console.error(`Failed to delete sprint ${sprintId}:`, err);
+                            failCount++;
+                        }
+                    }
                     break;
 
                 case 'archive':
                     console.log('📦 Archiving sprints:', selectedIds);
-                    for (const sprintId of selectedIds) {
-                        const result = await actions.sprints.archiveSprint?.(activeSuite.id, sprintId, 'Bulk archive');
-                        console.log(`Archive result for ${sprintId}:`, result);
+                    if (!actions.sprints?.archiveSprint) {
+                        throw new Error('archiveSprint action not available');
                     }
-                    actions.ui?.showNotification?.({
-                        id: 'bulk-archive-success',
-                        type: 'success',
-                        message: `${selectedIds.length} sprint(s) archived successfully`,
-                        duration: 3000
-                    });
+                    for (const sprintId of selectedIds) {
+                        try {
+                            const result = await actions.sprints.archiveSprint(activeSuite.id, sprintId, 'Bulk archive');
+                            console.log(`Archive result for ${sprintId}:`, result);
+                            if (result?.success !== false) {
+                                successCount++;
+                            } else {
+                                failCount++;
+                            }
+                        } catch (err) {
+                            console.error(`Failed to archive sprint ${sprintId}:`, err);
+                            failCount++;
+                        }
+                    }
                     break;
 
                 case 'start':
                     console.log('▶️ Starting sprints:', selectedIds);
-                    for (const sprintId of selectedIds) {
-                        const result = await actions.sprints.updateSprint(sprintId, { status: 'active' }, activeSuite.id);
-                        console.log(`Start result for ${sprintId}:`, result);
+                    if (!actions.sprints?.updateSprint) {
+                        throw new Error('updateSprint action not available');
                     }
-                    actions.ui?.showNotification?.({
-                        id: 'bulk-start-success',
-                        type: 'success',
-                        message: `${selectedIds.length} sprint(s) started successfully`,
-                        duration: 3000
-                    });
+                    for (const sprintId of selectedIds) {
+                        try {
+                            const result = await actions.sprints.updateSprint(sprintId, { status: 'active' }, activeSuite.id);
+                            console.log(`Start result for ${sprintId}:`, result);
+                            if (result?.success !== false) {
+                                successCount++;
+                            } else {
+                                failCount++;
+                            }
+                        } catch (err) {
+                            console.error(`Failed to start sprint ${sprintId}:`, err);
+                            failCount++;
+                        }
+                    }
                     break;
 
                 case 'complete':
                     console.log('✅ Completing sprints:', selectedIds);
-                    for (const sprintId of selectedIds) {
-                        const result = await actions.sprints.updateSprint(sprintId, { status: 'completed' }, activeSuite.id);
-                        console.log(`Complete result for ${sprintId}:`, result);
+                    if (!actions.sprints?.updateSprint) {
+                        throw new Error('updateSprint action not available');
                     }
-                    actions.ui?.showNotification?.({
-                        id: 'bulk-complete-success',
-                        type: 'success',
-                        message: `${selectedIds.length} sprint(s) completed successfully`,
-                        duration: 3000
-                    });
+                    for (const sprintId of selectedIds) {
+                        try {
+                            const result = await actions.sprints.updateSprint(sprintId, { status: 'completed' }, activeSuite.id);
+                            console.log(`Complete result for ${sprintId}:`, result);
+                            if (result?.success !== false) {
+                                successCount++;
+                            } else {
+                                failCount++;
+                            }
+                        } catch (err) {
+                            console.error(`Failed to complete sprint ${sprintId}:`, err);
+                            failCount++;
+                        }
+                    }
                     break;
 
                 case 'close':
                     console.log('🔒 Closing sprints:', selectedIds);
-                    for (const sprintId of selectedIds) {
-                        const result = await actions.sprints.updateSprint(sprintId, { status: 'closed' }, activeSuite.id);
-                        console.log(`Close result for ${sprintId}:`, result);
+                    if (!actions.sprints?.updateSprint) {
+                        throw new Error('updateSprint action not available');
                     }
-                    actions.ui?.showNotification?.({
-                        id: 'bulk-close-success',
-                        type: 'success',
-                        message: `${selectedIds.length} sprint(s) closed successfully`,
-                        duration: 3000
-                    });
+                    for (const sprintId of selectedIds) {
+                        try {
+                            const result = await actions.sprints.updateSprint(sprintId, { status: 'closed' }, activeSuite.id);
+                            console.log(`Close result for ${sprintId}:`, result);
+                            if (result?.success !== false) {
+                                successCount++;
+                            } else {
+                                failCount++;
+                            }
+                        } catch (err) {
+                            console.error(`Failed to close sprint ${sprintId}:`, err);
+                            failCount++;
+                        }
+                    }
                     break;
 
                 default:
                     console.warn('Unhandled action:', actionId);
+                    throw new Error(`Unknown action: ${actionId}`);
             }
 
+            // Show appropriate notification based on results
+            if (successCount > 0 && failCount === 0) {
+                actions.ui?.showNotification?.({
+                    id: `bulk-${actionId}-success`,
+                    type: 'success',
+                    message: `${successCount} sprint(s) ${actionId === 'delete' ? 'deleted' : actionId === 'archive' ? 'archived' : 'updated'} successfully`,
+                    duration: 3000
+                });
+            } else if (successCount > 0 && failCount > 0) {
+                actions.ui?.showNotification?.({
+                    id: `bulk-${actionId}-partial`,
+                    type: 'warning',
+                    message: `${successCount} succeeded, ${failCount} failed`,
+                    duration: 4000
+                });
+            } else if (failCount > 0) {
+                throw new Error(`All ${failCount} operations failed`);
+            }
+
+            // Clear selection after successful action
             setSelectedItems([]);
         } catch (error) {
             console.error('💥 Bulk action failed:', error);
@@ -225,7 +329,10 @@ const SprintsPage = () => {
                 duration: 5000
             });
         } finally {
-            setLoadingActions(prev => prev.filter(id => id !== actionId));
+            setLoadingActions(prev => {
+                console.log('🧹 Removing from loading actions:', actionId, 'Current:', prev);
+                return prev.filter(id => id !== actionId);
+            });
         }
     };
 
@@ -327,6 +434,22 @@ const SprintsPage = () => {
                         const daysRemaining = getDaysRemaining(sprint.endDate);
                         const isSelected = selectedItems.includes(sprint.id);
                         
+                        // Calculate progress using utility
+                        const progressPercentage = calculateSprintProgress(
+                            sprint,
+                            allTestCases,
+                            allBugs,
+                            allRecommendations
+                        );
+
+                        // Get asset counts using utility
+                        const assetCounts = getSprintAssetCounts(
+                            sprint.id,
+                            allTestCases,
+                            allBugs,
+                            allRecommendations
+                        );
+                        
                         return (
                             <div
                                 key={sprint.id}
@@ -427,66 +550,44 @@ const SprintsPage = () => {
                                         </div>
                                     )}
 
-                                    {/* Display REAL asset counts from global state - FIXED */}
-                                    {(() => {
-                                        const allTestCases = state?.testCases?.testCases || [];
-                                        const allBugs = state?.bugs?.bugs || [];
-                                        const allRecommendations = state?.recommendations?.recommendations || [];
-                                        
-                                        const sprintTestCases = allTestCases.filter(tc => 
-                                            (tc.sprint_id === sprint.id || tc.sprintId === sprint.id) &&
-                                            tc.status !== 'deleted' && tc.status !== 'archived'
-                                        ).length;
-                                        
-                                        const sprintBugs = allBugs.filter(bug => 
-                                            (bug.sprint_id === sprint.id || bug.sprintId === sprint.id) &&
-                                            bug.status !== 'deleted' && bug.status !== 'archived'
-                                        ).length;
-                                        
-                                        const sprintRecs = allRecommendations.filter(rec => 
-                                            (rec.sprint_id === sprint.id || rec.sprintId === sprint.id) &&
-                                            rec.status !== 'deleted' && rec.status !== 'archived'
-                                        ).length;
-                                        
-                                        const hasAssets = sprintTestCases > 0 || sprintBugs > 0 || sprintRecs > 0;
-                                        
-                                        return hasAssets && (
-                                            <div className="flex items-center space-x-3 mt-2 pt-2 border-t border-border text-xs">
-                                                {sprintTestCases > 0 && (
-                                                    <span className="flex items-center space-x-1">
-                                                        <span className="text-blue-600 dark:text-blue-400 font-medium">{sprintTestCases}</span>
-                                                        <span className="text-muted-foreground">tests</span>
-                                                    </span>
-                                                )}
-                                                {sprintBugs > 0 && (
-                                                    <span className="flex items-center space-x-1">
-                                                        <span className="text-red-600 dark:text-red-400 font-medium">{sprintBugs}</span>
-                                                        <span className="text-muted-foreground">bugs</span>
-                                                    </span>
-                                                )}
-                                                {sprintRecs > 0 && (
-                                                    <span className="flex items-center space-x-1">
-                                                        <span className="text-yellow-600 dark:text-yellow-400 font-medium">{sprintRecs}</span>
-                                                        <span className="text-muted-foreground">recommendations</span>
-                                                    </span>
-                                                )}
-                                            </div>
-                                        );
-                                    })()}
+                                    {/* Display asset counts */}
+                                    {assetCounts.total > 0 && (
+                                        <div className="flex items-center space-x-3 mt-2 pt-2 border-t border-border text-xs">
+                                            {assetCounts.testCases > 0 && (
+                                                <span className="flex items-center space-x-1">
+                                                    <span className="text-blue-600 dark:text-blue-400 font-medium">{assetCounts.testCases}</span>
+                                                    <span className="text-muted-foreground">tests</span>
+                                                </span>
+                                            )}
+                                            {assetCounts.bugs > 0 && (
+                                                <span className="flex items-center space-x-1">
+                                                    <span className="text-red-600 dark:text-red-400 font-medium">{assetCounts.bugs}</span>
+                                                    <span className="text-muted-foreground">bugs</span>
+                                                </span>
+                                            )}
+                                            {assetCounts.recommendations > 0 && (
+                                                <span className="flex items-center space-x-1">
+                                                    <span className="text-yellow-600 dark:text-yellow-400 font-medium">{assetCounts.recommendations}</span>
+                                                    <span className="text-muted-foreground">recommendations</span>
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
 
-                                {sprint.progress && (
+                                {/* Progress Bar - using utility */}
+                                {assetCounts.total > 0 && (
                                     <div className="mt-3 pt-3 border-t border-border ml-8">
                                         <div className="flex items-center justify-between mb-1">
                                             <span className="text-xs text-muted-foreground">Progress</span>
                                             <span className="text-xs font-medium text-foreground">
-                                                {sprint.progress.percentage || 0}%
+                                                {progressPercentage}%
                                             </span>
                                         </div>
                                         <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
                                             <div 
                                                 className="h-full bg-primary rounded-full transition-all"
-                                                style={{ width: `${sprint.progress.percentage || 0}%` }}
+                                                style={{ width: `${progressPercentage}%` }}
                                             />
                                         </div>
                                     </div>
