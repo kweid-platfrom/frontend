@@ -820,4 +820,149 @@ export class OrganizationService extends BaseFirestoreService {
             };
         }
     }
+
+    
+/**
+ * Create organization invitation - RESPECTS SECURITY RULES
+ */
+async createInvitation(organizationId, invitationData) {
+    const userId = this.getCurrentUserId();
+    if (!userId) {
+        return { 
+            success: false, 
+            error: { message: 'Authentication required to create invitation' } 
+        };
+    }
+
+    if (!organizationId) {
+        return { 
+            success: false, 
+            error: { message: 'Organization ID is required' } 
+        };
+    }
+
+    if (!invitationData.email) {
+        return { 
+            success: false, 
+            error: { message: 'Recipient email is required' } 
+        };
+    }
+
+    try {
+        console.log('📧 Starting invitation creation process...');
+
+        // Step 1: Validate user is admin/manager of organization
+        console.log('🔍 Validating user permissions...');
+        const hasAccess = await this.validateOrganizationAccess(organizationId, 'manager');
+        if (!hasAccess) {
+            return {
+                success: false,
+                error: { message: 'Insufficient permissions. Only organization managers can send invitations.' }
+            };
+        }
+
+        // Step 2: Verify organization exists
+        console.log('🔍 Verifying organization...');
+        const orgDoc = await this.getDocument('organizations', organizationId);
+        if (!orgDoc.success) {
+            return {
+                success: false,
+                error: { message: 'Organization not found' }
+            };
+        }
+
+        // Step 3: Create invitation document in subcollection using token as ID
+        console.log('📄 Creating invitation document...');
+        const timestamp = new Date().toISOString();
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + 7);
+
+        const completeInvitationData = {
+            // REQUIRED fields
+            email: invitationData.email.toLowerCase().trim(),
+            organizationId: organizationId,
+            organizationName: orgDoc.data.name,
+            inviterEmail: this.getCurrentUser()?.email || userId,
+            inviterName: invitationData.inviterName || 'Team Member',
+            
+            // Invitation details
+            token: invitationData.token,
+            role: invitationData.role || 'member',
+            suiteIds: Array.isArray(invitationData.suiteIds) ? invitationData.suiteIds : [],
+            
+            // Status and timestamps
+            status: 'pending',
+            createdAt: timestamp,
+            expiresAt: expiresAt.toISOString(),
+            acceptedAt: null,
+            created_by: userId,
+            created_at: timestamp,
+            updated_at: timestamp,
+            updated_by: userId
+        };
+
+        // Create invitation using inherited createDocument method
+        const invitationPath = `organizations/${organizationId}/invitations`;
+        const result = await this.createDocument(invitationPath, completeInvitationData, invitationData.token);
+
+        if (!result.success) {
+            console.error('❌ Failed to create invitation document:', result.error);
+            return result;
+        }
+
+        console.log('✅ Invitation document created with token:', invitationData.token.substring(0, 8) + '...');
+
+        // Step 4: Update organization stats
+        console.log('📊 Updating organization stats...');
+        try {
+            await this.updateDocument('organizations', organizationId, {
+                lastInvitationSent: timestamp,
+                updated_at: timestamp
+            });
+            console.log('✅ Organization stats updated');
+        } catch (error) {
+            console.warn('⚠️ Could not update organization stats:', error.message);
+        }
+
+        console.log('🎉 Invitation created successfully');
+
+        return {
+            success: true,
+            data: {
+                id: invitationData.token,
+                email: completeInvitationData.email,
+                organizationId: organizationId,
+                status: 'pending',
+                expiresAt: completeInvitationData.expiresAt,
+                createdAt: timestamp
+            }
+        };
+
+    } catch (error) {
+        console.error('❌ Invitation creation failed:', error);
+
+        let errorMessage = 'Failed to create invitation. Please try again.';
+        let errorCode = 'creation-failed';
+
+        if (error.code === 'permission-denied') {
+            errorMessage = 'Permission denied: You do not have permission to send invitations.';
+            errorCode = 'permission-denied';
+        } else if (error.code === 'not-found') {
+            errorMessage = 'Organization not found.';
+            errorCode = 'org-not-found';
+        } else if (error.code === 'already-exists') {
+            errorMessage = 'Invitation already exists for this email.';
+            errorCode = 'duplicate-invite';
+        }
+
+        return {
+            success: false,
+            error: {
+                message: errorMessage,
+                code: errorCode,
+                details: error.message
+            }
+        };
+    }
+}
 }

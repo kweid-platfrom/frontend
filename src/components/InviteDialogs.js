@@ -1,3 +1,4 @@
+// InviteDialogs.jsx
 import { AlertCircle, CheckCircle, Folder } from "lucide-react";
 import {
     AlertDialog,
@@ -8,7 +9,6 @@ import {
     AlertDialogAction,
     AlertDialogTitle,
     AlertDialogDescription,
-    AlertDialogOverlay,
 } from "@/components/ui/alert-dialog";
 
 const InviteDialogs = ({
@@ -16,17 +16,19 @@ const InviteDialogs = ({
     setShowConfirmDialog,
     showResultsDialog,
     setShowResultsDialog,
-    externalEmails,
-    orgDomain,
-    selectedProjects,
-    organizationProjects,
+    externalEmails = [],
+    orgDomain = "",
+    selectedSuites = [],
+    organizationSuites = [],
     inviteResults,
     onConfirmExternalInvite,
     onCloseResultsDialog
 }) => {
-    const selectedProjectNames = selectedProjects.map(id => 
-        organizationProjects.find(p => p.id === id)?.name
-    ).filter(Boolean);
+    const selectedSuiteNames = selectedSuites
+        .map(id => organizationSuites.find(s => s.id === id)?.name)
+        .filter(Boolean);
+
+    const externalEmailsList = externalEmails.filter(email => !email.endsWith(`@${orgDomain}`));
 
     const getStatusIcon = (status) => {
         switch (status) {
@@ -56,37 +58,34 @@ const InviteDialogs = ({
 
     return (
         <>
-            {/* External Email Confirmation Dialog */}
+            {/* Confirmation Dialog */}
             <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
-                <AlertDialogOverlay className="fixed inset-0 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 z-50" />
-                <AlertDialogContent className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-slate-200 bg-white p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg mx-4">
+                <AlertDialogContent className="max-w-md">
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="text-lg sm:text-xl font-semibold text-slate-900">
-                            Invite External Members?
-                        </AlertDialogTitle>
-                        <AlertDialogDescription className="text-sm sm:text-base text-slate-600 mt-2">
-                            {externalEmails.filter(email => !email.endsWith(`@${orgDomain}`)).length} email{externalEmails.filter(email => !email.endsWith(`@${orgDomain}`)).length !== 1 ? 's are' : ' is'} outside your organization ({orgDomain}).
-                            External members will have the same access as internal team members.
-                            
-                            <div className="mt-3 p-3 bg-slate-50 rounded-lg">
-                                <div className="text-sm font-medium text-slate-700 mb-2">External emails:</div>
+                        <AlertDialogTitle>Invite External Members?</AlertDialogTitle>
+                        <AlertDialogDescription className="space-y-3 mt-4">
+                            <p>
+                                {externalEmailsList.length} email{externalEmailsList.length !== 1 ? 's are' : ' is'} outside your organization ({orgDomain}).
+                            </p>
+
+                            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
+                                <div className="text-sm font-medium text-yellow-900 mb-2">External emails:</div>
                                 <div className="space-y-1">
-                                    {externalEmails.filter(email => !email.endsWith(`@${orgDomain}`)).map((email, index) => (
-                                        <div key={index} className="text-sm text-slate-600 flex items-center gap-2">
-                                            <div className="w-2 h-2 bg-yellow-400 rounded-full"></div>
-                                            {email}
+                                    {externalEmailsList.map((email, idx) => (
+                                        <div key={idx} className="text-sm text-yellow-800 flex items-center gap-2">
+                                            <div className="w-2 h-2 bg-yellow-400 rounded-full flex-shrink-0" />
+                                            <span className="truncate">{email}</span>
                                         </div>
                                     ))}
                                 </div>
                             </div>
 
-                            {/* Show selected projects in confirmation */}
-                            {selectedProjects.length > 0 && (
-                                <div className="mt-3 p-3 bg-teal-50 rounded-lg">
-                                    <div className="text-sm font-medium text-teal-700 mb-2">Selected projects:</div>
-                                    <div className="flex flex-wrap gap-1">
-                                        {selectedProjectNames.map((name, index) => (
-                                            <span key={index} className="inline-flex items-center gap-1 px-2 py-1 bg-teal-100 text-teal-700 text-xs rounded-full">
+                            {selectedSuiteNames.length > 0 && (
+                                <div className="p-3 bg-teal-50 border border-teal-200 rounded">
+                                    <div className="text-sm font-medium text-teal-900 mb-2">Selected suites:</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {selectedSuiteNames.map((name, idx) => (
+                                            <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-teal-100 text-teal-700 text-xs rounded-full">
                                                 <Folder className="w-3 h-3" />
                                                 {name}
                                             </span>
@@ -96,57 +95,44 @@ const InviteDialogs = ({
                             )}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2 gap-2 sm:gap-0 mt-6">
-                        <AlertDialogCancel
-                            onClick={() => setShowConfirmDialog(false)}
-                            className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-md hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
-                        >
-                            Cancel
-                        </AlertDialogCancel>
-                        <AlertDialogAction
-                            onClick={onConfirmExternalInvite}
-                            className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-teal-600 border border-transparent rounded-md hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                        >
+                    <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={onConfirmExternalInvite}>
                             Yes, Send Invites
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
 
-            {/* Invitation Results Dialog */}
+            {/* Results Dialog */}
             <AlertDialog open={showResultsDialog} onOpenChange={setShowResultsDialog}>
-                <AlertDialogOverlay className="fixed inset-0 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 z-50" />
-                <AlertDialogContent className="fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border border-slate-200 bg-white p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg mx-4">
+                <AlertDialogContent className="max-w-md">
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="text-lg sm:text-xl font-semibold text-slate-900">
-                            Invitation Results
-                        </AlertDialogTitle>
+                        <AlertDialogTitle>Invitation Results</AlertDialogTitle>
                         <AlertDialogDescription asChild>
-                            <div className="space-y-4 mt-2">
+                            <div className="space-y-3 mt-4">
                                 {inviteResults?.summary && (
-                                    <div className="text-sm text-slate-600">
-                                        <div className="flex gap-4 text-xs bg-slate-50 p-3 rounded-lg">
-                                            <span className="text-green-600 font-medium">✓ {inviteResults.summary.sent} sent</span>
-                                            {inviteResults.summary.failed > 0 && (
-                                                <span className="text-red-600 font-medium">✗ {inviteResults.summary.failed} failed</span>
-                                            )}
-                                            {inviteResults.summary.alreadyInvited > 0 && (
-                                                <span className="text-yellow-600 font-medium">⚠ {inviteResults.summary.alreadyInvited} already invited</span>
-                                            )}
-                                        </div>
+                                    <div className="flex gap-3 text-xs bg-slate-100 p-3 rounded">
+                                        <span className="text-green-600 font-medium">✓ {inviteResults.summary.sent} sent</span>
+                                        {inviteResults.summary.failed > 0 && (
+                                            <span className="text-red-600 font-medium">✗ {inviteResults.summary.failed} failed</span>
+                                        )}
+                                        {inviteResults.summary.alreadyInvited > 0 && (
+                                            <span className="text-yellow-600 font-medium">⚠ {inviteResults.summary.alreadyInvited} already invited</span>
+                                        )}
                                     </div>
                                 )}
 
                                 {inviteResults?.results && (
                                     <div className="space-y-2 max-h-48 overflow-y-auto">
-                                        {inviteResults.results.map((result, index) => (
-                                            <div key={index} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg text-sm">
-                                                {getStatusIcon(result.status)}
-                                                <div className="flex-1">
-                                                    <div className="font-medium text-slate-900">{result.email}</div>
-                                                    <div className="text-xs text-slate-500">{getStatusText(result.status)}</div>
+                                        {inviteResults.results.map((result, idx) => (
+                                            <div key={idx} className="flex items-start gap-2 p-2 bg-slate-50 rounded text-xs">
+                                                <div className="flex-shrink-0 mt-0.5">{getStatusIcon(result.status)}</div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="font-medium truncate">{result.email}</div>
+                                                    <div className="text-slate-500">{getStatusText(result.status)}</div>
                                                     {result.message && result.message !== getStatusText(result.status) && (
-                                                        <div className="text-xs text-slate-500 mt-1">{result.message}</div>
+                                                        <div className="text-slate-500 mt-1 break-words">{result.message}</div>
                                                     )}
                                                 </div>
                                             </div>
@@ -156,11 +142,8 @@ const InviteDialogs = ({
                             </div>
                         </AlertDialogDescription>
                     </AlertDialogHeader>
-                    <AlertDialogFooter className="mt-6">
-                        <AlertDialogAction
-                            onClick={onCloseResultsDialog}
-                            className="w-full sm:w-auto px-4 py-2 text-sm font-medium text-white bg-teal-600 border border-transparent rounded-md hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500"
-                        >
+                    <AlertDialogFooter>
+                        <AlertDialogAction onClick={onCloseResultsDialog}>
                             Got it
                         </AlertDialogAction>
                     </AlertDialogFooter>

@@ -23,8 +23,9 @@ const TestCases = () => {
     const testRunsHook = useTestRuns();
     const uiHook = useUI();
 
-    const [setLoadingActions] = useState([]);
-    const [setSelectedItems] = useState([]);
+    // FIX: Properly initialize state with useState
+    const [loadingActions, setLoadingActions] = useState([]);
+    const [selectedItems, setSelectedItems] = useState([]);
     const [filteredTestCases, setFilteredTestCases] = useState([]);
     const [selectedTestCase, setSelectedTestCase] = useState(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -69,6 +70,17 @@ const TestCases = () => {
     useEffect(() => {
         relationshipsRef.current = testCasesHook.relationships || { testCaseToBugs: {} };
     }, [testCasesHook.relationships]);
+
+    // Debug logging
+    useEffect(() => {
+        console.log('🔍 TestCasesPage state:', {
+            hasSetLoadingActions: typeof setLoadingActions === 'function',
+            hasSetSelectedItems: typeof setSelectedItems === 'function',
+            loadingActionsCount: loadingActions.length,
+            selectedItemsCount: selectedItems.length,
+            testCasesCount: testCasesRef.current.length
+        });
+    }, [loadingActions, selectedItems]);
 
     // Unified notification function - FIX FOR TOAST ISSUE
     const showNotification = useCallback((type, title, message, persistent = false) => {
@@ -337,6 +349,8 @@ const TestCases = () => {
     }, [testCasesHook.testCasesLocked, showNotification]);
 
     const handleDeleteTestCase = useCallback(async (id) => {
+        console.log('🗑️ handleDeleteTestCase called for:', id);
+        
         try {
             if (testCasesHook.testCasesLocked) {
                 throw new Error('Test cases are locked. Upgrade to access.');
@@ -344,6 +358,13 @@ const TestCases = () => {
 
             // FIXED: Check if test case is in a run with proper notification
             const testCase = testCasesRef.current.find(tc => tc.id === id);
+            
+            if (!testCase) {
+                throw new Error('Test case not found');
+            }
+            
+            console.log('📋 Test case to delete:', { id, title: testCase.title, runs: testCase.runs });
+            
             if (testCase?.runs && testCase.runs.length > 0) {
                 showNotification(
                     'warning',
@@ -351,13 +372,19 @@ const TestCases = () => {
                     `This test case is part of ${testCase.runs.length} test run(s) and cannot be deleted.`,
                     true
                 );
-                return;
+                throw new Error('Test case is part of active runs');
             }
 
-            await testCasesHook.deleteTestCase(id);
+            console.log('⚡ Calling deleteTestCase from hook...');
+            const result = await testCasesHook.deleteTestCase(id);
+            console.log('✅ Delete result:', result);
+            
             showNotification('success', 'Success', 'Test case deleted successfully');
+            return { success: true };
         } catch (error) {
+            console.error('❌ Delete error:', error);
             handleError(error, 'delete test case');
+            return { success: false, error };
         }
     }, [testCasesHook, showNotification, handleError]);
 
@@ -415,11 +442,6 @@ const TestCases = () => {
                 ? Math.floor((new Date() - new Date(lastRun.executed_at)) / (1000 * 60 * 60 * 24))
                 : null;
             
-            // Criteria for re-testing:
-            // 1. Test was modified since last run
-            // 2. Test failed/blocked in last run
-            // 3. Test hasn't been run in over 30 days
-            // 4. Feature version changed (if tracked)
             const wasModifiedSinceLastRun = lastRun?.executed_at && testCase.updated_at
                 ? new Date(testCase.updated_at) > new Date(lastRun.executed_at)
                 : true;
@@ -450,13 +472,11 @@ const TestCases = () => {
                 suite_id: testCasesHook.activeSuite?.id || activeSuite?.id
             };
 
-            // NEW: Check for passed test cases
             const { passedTests, eligibleTests } = checkPassedTestCases(
                 runData.test_cases,
                 runData.sprint_id
             );
 
-            // Show warning if there are passed tests
             if (passedTests.length > 0) {
                 const shouldContinue = window.confirm(
                     `Warning: ${passedTests.length} test case(s) passed in recent runs:\n\n` +
@@ -468,7 +488,6 @@ const TestCases = () => {
                 );
 
                 if (!shouldContinue) {
-                    // Only create run with eligible tests
                     if (eligibleTests.length === 0) {
                         showNotification(
                             'info',
@@ -497,10 +516,18 @@ const TestCases = () => {
     }, [testRunsHook, testCasesHook.activeSuite, activeSuite, showNotification, router, handleError, checkPassedTestCases]);
 
     const handleBulkAction = async (actionId, selectedIds, actionConfig, selectedOption) => {
-        console.log('Bulk action triggered:', { actionId, selectedIds, actionConfig, selectedOption });
+        console.log('🎯 Bulk action triggered:', { 
+            actionId, 
+            selectedIds, 
+            actionConfig, 
+            selectedOption,
+            hasSetLoadingActions: typeof setLoadingActions === 'function',
+            hasSetSelectedItems: typeof setSelectedItems === 'function'
+        });
         
         // Filter out test cases that are in runs for execution-related actions
         const executionActions = ['pass', 'fail', 'block', 'reset'];
+        let validSelectedIds = selectedIds;
         
         if (executionActions.includes(actionId)) {
             const testCasesInRuns = selectedIds.filter(id => {
@@ -526,58 +553,68 @@ const TestCases = () => {
                 return;
             }
 
-            selectedIds = validTestCases;
+            validSelectedIds = validTestCases;
         }
 
-        setLoadingActions(prev => [...prev, actionId]);
+        setLoadingActions(prev => {
+            console.log('📝 Adding to loading actions:', actionId);
+            return [...prev, actionId];
+        });
 
         try {
             switch (actionId) {
                 case 'pass':
                     await Promise.all(
-                        selectedIds.map(id => handleUpdateExecutionStatus(id, 'passed'))
+                        validSelectedIds.map(id => handleUpdateExecutionStatus(id, 'passed'))
                     );
-                    showNotification('success', 'Success', `${selectedIds.length} test case(s) marked as passed`);
+                    showNotification('success', 'Success', `${validSelectedIds.length} test case(s) marked as passed`);
                     break;
 
                 case 'fail':
                     await Promise.all(
-                        selectedIds.map(id => handleUpdateExecutionStatus(id, 'failed'))
+                        validSelectedIds.map(id => handleUpdateExecutionStatus(id, 'failed'))
                     );
-                    showNotification('success', 'Success', `${selectedIds.length} test case(s) marked as failed`);
+                    showNotification('success', 'Success', `${validSelectedIds.length} test case(s) marked as failed`);
                     break;
 
                 case 'block':
                     await Promise.all(
-                        selectedIds.map(id => handleUpdateExecutionStatus(id, 'blocked'))
+                        validSelectedIds.map(id => handleUpdateExecutionStatus(id, 'blocked'))
                     );
-                    showNotification('success', 'Success', `${selectedIds.length} test case(s) marked as blocked`);
+                    showNotification('success', 'Success', `${validSelectedIds.length} test case(s) marked as blocked`);
                     break;
 
                 case 'reset':
                     await Promise.all(
-                        selectedIds.map(id => testCasesHook.updateTestCase(id, {
+                        validSelectedIds.map(id => testCasesHook.updateTestCase(id, {
                             executionStatus: 'pending',
                             lastExecuted: null,
                             updated_at: new Date()
                         }))
                     );
-                    showNotification('success', 'Success', `${selectedIds.length} test case(s) reset to pending`);
+                    showNotification('success', 'Success', `${validSelectedIds.length} test case(s) reset to pending`);
                     break;
 
                 case 'run':
-                    testCasesHook.selectTestCases(selectedIds);
+                    testCasesHook.selectTestCases(validSelectedIds);
                     setIsCreateRunModalOpen(true);
                     break;
 
                 case 'delete':
-                    // Filter out test cases in runs
-                    const deletableIds = selectedIds.filter(id => {
+                    console.log('🗑️ Delete action triggered for:', validSelectedIds);
+                    
+                    const deletableIds = validSelectedIds.filter(id => {
                         const tc = testCasesRef.current.find(t => t.id === id);
                         return !tc?.runs || tc.runs.length === 0;
                     });
 
-                    const inRunsCount = selectedIds.length - deletableIds.length;
+                    const inRunsCount = validSelectedIds.length - deletableIds.length;
+                    
+                    console.log('📊 Delete validation:', { 
+                        total: validSelectedIds.length, 
+                        deletable: deletableIds.length, 
+                        inRuns: inRunsCount 
+                    });
                     
                     if (inRunsCount > 0) {
                         showNotification(
@@ -589,28 +626,57 @@ const TestCases = () => {
                     }
 
                     if (deletableIds.length > 0) {
-                        await Promise.all(deletableIds.map(id => handleDeleteTestCase(id)));
+                        console.log('🔄 Deleting test cases:', deletableIds);
+                        
+                        // Delete each test case individually and track results
+                        let successCount = 0;
+                        let failCount = 0;
+                        
+                        for (const id of deletableIds) {
+                            try {
+                                await testCasesHook.deleteTestCase(id);
+                                successCount++;
+                                console.log(`✅ Deleted test case: ${id}`);
+                            } catch (error) {
+                                failCount++;
+                                console.error(`❌ Failed to delete test case ${id}:`, error);
+                            }
+                        }
+                        
+                        if (successCount > 0) {
+                            showNotification(
+                                'success', 
+                                'Success', 
+                                `${successCount} test case(s) deleted successfully${failCount > 0 ? ` (${failCount} failed)` : ''}`
+                            );
+                        }
+                        
+                        if (failCount > 0 && successCount === 0) {
+                            throw new Error(`Failed to delete ${failCount} test case(s)`);
+                        }
+                    } else if (inRunsCount === 0) {
+                        showNotification('info', 'No Items', 'No test cases to delete');
                     }
                     break;
 
                 case 'archive':
                     await Promise.all(
-                        selectedIds.map(id => testCasesHook.updateTestCase(id, {
+                        validSelectedIds.map(id => testCasesHook.updateTestCase(id, {
                             status: 'archived',
                             updated_at: new Date()
                         }))
                     );
-                    showNotification('success', 'Success', `${selectedIds.length} test case(s) archived`);
+                    showNotification('success', 'Success', `${validSelectedIds.length} test case(s) archived`);
                     break;
 
                 case 'activate':
                     await Promise.all(
-                        selectedIds.map(id => testCasesHook.updateTestCase(id, {
+                        validSelectedIds.map(id => testCasesHook.updateTestCase(id, {
                             status: 'active',
                             updated_at: new Date()
                         }))
                     );
-                    showNotification('success', 'Success', `${selectedIds.length} test case(s) activated`);
+                    showNotification('success', 'Success', `${validSelectedIds.length} test case(s) activated`);
                     break;
 
                 case 'add-to-sprint':
@@ -621,7 +687,7 @@ const TestCases = () => {
 
                     const testCaseResult = await actions.linking.addTestCasesToSprint(
                         selectedOption.id,
-                        selectedIds
+                        validSelectedIds
                     );
 
                     if (testCaseResult.success) {
@@ -636,13 +702,13 @@ const TestCases = () => {
                     }
 
                     await Promise.all(
-                        selectedIds.map(id => testCasesHook.updateTestCase(id, {
+                        validSelectedIds.map(id => testCasesHook.updateTestCase(id, {
                             module: selectedOption.label,
                             updated_at: new Date()
                         }))
                     );
 
-                    showNotification('success', 'Success', `${selectedIds.length} test case(s) added to ${selectedOption.label}`);
+                    showNotification('success', 'Success', `${validSelectedIds.length} test case(s) added to ${selectedOption.label}`);
                     break;
 
                 case 'assign':
@@ -652,13 +718,13 @@ const TestCases = () => {
                     }
 
                     await Promise.all(
-                        selectedIds.map(id => testCasesHook.updateTestCase(id, {
+                        validSelectedIds.map(id => testCasesHook.updateTestCase(id, {
                             assignee: selectedOption.label,
                             updated_at: new Date()
                         }))
                     );
 
-                    showNotification('success', 'Success', `${selectedIds.length} test case(s) assigned to ${selectedOption.label}`);
+                    showNotification('success', 'Success', `${validSelectedIds.length} test case(s) assigned to ${selectedOption.label}`);
                     break;
 
                 case 'group':
@@ -679,10 +745,13 @@ const TestCases = () => {
             testCasesHook.selectTestCases([]);
             setSelectedItems([]);
         } catch (error) {
-            console.error('Bulk action failed:', error);
+            console.error('💥 Bulk action failed:', error);
             showNotification('error', 'Error', `Failed to ${actionId}: ${error.message}`);
         } finally {
-            setLoadingActions(prev => prev.filter(id => id !== actionId));
+            setLoadingActions(prev => {
+                console.log('🧹 Removing from loading actions:', actionId);
+                return prev.filter(id => id !== actionId);
+            });
         }
     };
 

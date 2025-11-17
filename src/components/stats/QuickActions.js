@@ -34,62 +34,90 @@ const QuickActions = ({ metrics, loading }) => {
     // Real-time activity subscription
     useEffect(() => {
         if (!isAuthenticated || !activeSuite?.id) {
+            console.log('No auth or suite, clearing activities');
             setRecentActivities([]);
             setActivitiesLoading(false);
             return;
         }
 
+        console.log('Setting up activity subscription for suite:', activeSuite.id);
         setActivitiesLoading(true);
 
-        // Subscribe to real-time updates
-        const unsubscribe = ActivityService.subscribeToActivities(
-            activeSuite.id,
-            (newActivities) => {
-                console.log(`QuickActions: Received ${newActivities.length} activities`);
+        // Try using getActivities first as fallback
+        const fetchActivities = async () => {
+            try {
+                console.log('Attempting to fetch activities...');
+                const result = await ActivityService.getActivities(activeSuite.id, { limit: 10 });
+                console.log('getActivities result:', result);
                 
-                // Process and map activities
-                const processedActivities = (newActivities || []).map(activity => {
-                    const { icon, color } = getActivityIcon(activity.action || activity.type);
+                if (result.success && result.data && result.data.length > 0) {
+                    const processedActivities = result.data.map(activity => {
+                        const { icon, color } = getActivityIcon(activity.action || activity.type);
+                        
+                        return {
+                            id: activity.id || `${Date.now()}-${Math.random()}`,
+                            type: activity.action || activity.type || 'unknown',
+                            title: activity.description || 'Activity',
+                            description: activity.details || '',
+                            user: activity.userName || activity.userEmail || activity.user || 'User',
+                            timestamp: activity.timestamp?.toDate ? activity.timestamp.toDate() : 
+                                       activity.created_at?.toDate ? activity.created_at.toDate() : 
+                                       new Date(activity.timestamp || Date.now()),
+                            icon,
+                            color,
+                            details: {
+                                ...activity.metadata,
+                                suiteName: activity.suiteName,
+                                suiteId: activity.suiteId,
+                                aiGenerated: activity.metadata?.aiGenerated || activity.metadata?.isAIGenerated,
+                                hasRecording: activity.metadata?.hasRecording,
+                                feature: activity.metadata?.feature || activity.metadata?.module,
+                                severity: activity.metadata?.severity,
+                                priority: activity.metadata?.priority,
+                                assetType: activity.metadata?.assetType,
+                                assetName: activity.metadata?.assetName
+                            }
+                        };
+                    });
                     
-                    return {
-                        id: activity.id || `${activity.timestamp}-${Math.random()}`,
-                        type: activity.action || activity.type || 'unknown',
-                        title: activity.description || 'Activity',
-                        description: activity.details || '',
-                        user: activity.userName || activity.userEmail || activity.user || 'User',
-                        timestamp: activity.timestamp?.toDate ? activity.timestamp.toDate() : new Date(activity.timestamp || Date.now()),
-                        icon,
-                        color,
-                        details: {
-                            ...activity.metadata,
-                            suiteName: activity.suiteName,
-                            suiteId: activity.suiteId,
-                            aiGenerated: activity.metadata?.aiGenerated || activity.metadata?.isAIGenerated,
-                            hasRecording: activity.metadata?.hasRecording,
-                            feature: activity.metadata?.feature || activity.metadata?.module,
-                            severity: activity.metadata?.severity,
-                            priority: activity.metadata?.priority,
-                            assetType: activity.metadata?.assetType,
-                            assetName: activity.metadata?.assetName
-                        }
-                    };
-                });
-                
-                // Sort by timestamp (newest first) and take top 10
-                const sortedActivities = processedActivities
-                    .sort((a, b) => b.timestamp - a.timestamp)
-                    .slice(0, 10);
-                
-                setRecentActivities(sortedActivities);
-                setActivitiesLoading(false);
-            },
-            (error) => {
-                console.error('QuickActions activity subscription error:', error);
+                    console.log('Processed activities:', processedActivities);
+                    setRecentActivities(processedActivities);
+                } else {
+                    console.log('No activities found or empty result');
+                    setRecentActivities([]);
+                }
+            } catch (error) {
+                console.error('Error fetching activities:', error);
+                setRecentActivities([]);
+            } finally {
                 setActivitiesLoading(false);
             }
-        );
+        };
 
-        unsubscribeRef.current = unsubscribe;
+        // Fetch initially
+        fetchActivities();
+
+        // Don't attempt subscription if it's failing
+        // You can enable this later once activities exist
+        /*
+        try {
+            const unsubscribe = ActivityService.subscribeToActivities(
+                activeSuite.id,
+                (newActivities) => {
+                    // Handle subscription updates
+                },
+                (error) => {
+                    console.error('Subscription error:', error);
+                }
+            );
+
+            if (typeof unsubscribe === 'function') {
+                unsubscribeRef.current = unsubscribe;
+            }
+        } catch (error) {
+            console.error('Error setting up subscription:', error);
+        }
+        */
 
         return () => {
             if (unsubscribeRef.current && typeof unsubscribeRef.current === 'function') {
@@ -229,6 +257,27 @@ const QuickActions = ({ metrics, loading }) => {
         return colorMap[color] || colorMap.info;
     };
 
+    // Fetch AI Metrics
+    const [aiMetrics, setAiMetrics] = useState(null);
+    
+    useEffect(() => {
+        const fetchAIMetrics = async () => {
+            if (!activeSuite?.id) return;
+            
+            try {
+                const result = await calculateSuiteAIMetrics(activeSuite.id, 30);
+                if (result.success && result.data) {
+                    console.log('AI Metrics fetched:', result.data);
+                    setAiMetrics(result.data);
+                }
+            } catch (error) {
+                console.error('Error fetching AI metrics:', error);
+            }
+        };
+        
+        fetchAIMetrics();
+    }, [activeSuite?.id]);
+
     const quickStats = [
         { 
             label: "Active Tests", 
@@ -247,8 +296,8 @@ const QuickActions = ({ metrics, loading }) => {
         },
         { 
             label: "AI Generated", 
-            value: metrics?.aiGeneratedTestCases || 0, 
-            change: metrics?.aiGeneratedTestCases > 0 ? `+${Math.round((metrics?.aiGeneratedTestCases || 0) * 0.2)}` : '0'
+            value: aiMetrics?.totalTestCasesGenerated || metrics?.aiGeneratedTestCases || 0, 
+            change: aiMetrics?.totalTestCasesGenerated > 0 ? `+${Math.round((aiMetrics?.totalTestCasesGenerated || 0) * 0.2)}` : '0'
         }
     ];
 
@@ -326,11 +375,24 @@ const QuickActions = ({ metrics, loading }) => {
                             <Activity className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
                             <p className="text-sm text-muted-foreground">Select a test suite to view activities</p>
                         </div>
+                    ) : activitiesLoading ? (
+                        <div className="text-center py-8 sm:py-12">
+                            <Activity className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground mx-auto mb-3 animate-spin" />
+                            <p className="text-sm text-muted-foreground">Loading activities...</p>
+                        </div>
                     ) : recentActivities.length === 0 ? (
                         <div className="text-center py-8 sm:py-12">
                             <Activity className="w-10 h-10 sm:w-12 sm:h-12 text-muted-foreground mx-auto mb-3 opacity-50" />
                             <p className="text-sm text-muted-foreground">No recent activities yet</p>
-                            <p className="text-xs text-muted-foreground mt-1">Activities will appear here as you work</p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                                Activities will appear here when you:
+                            </p>
+                            <ul className="text-xs text-muted-foreground mt-2 space-y-1">
+                                <li>• Create or update test cases</li>
+                                <li>• Report or resolve bugs</li>
+                                <li>• Upload recordings</li>
+                                <li>• Use AI generation features</li>
+                            </ul>
                         </div>
                     ) : (
                         <div className="space-y-2 sm:space-y-3">

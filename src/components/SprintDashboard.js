@@ -15,6 +15,14 @@ import {
     BarChart3
 } from 'lucide-react';
 import { useApp } from '../context/AppProvider';
+import { 
+    getSprintMetrics,
+    filterAssetsBySprint,
+    formatDate,
+    getDaysRemaining,
+    getSprintStatusInfo,
+    getStatusBadgeClasses
+} from '../utils/sprintUtils';
 
 const SprintDashboard = ({ sprintId }) => {
     const { state } = useApp();
@@ -27,7 +35,12 @@ const SprintDashboard = ({ sprintId }) => {
         ? sprints.find(s => s.id === sprintId)
         : activeSprint;
 
-    // ✅ FIXED: Filter assets from global state by sprint_id
+    // Get all assets from global state
+    const allTestCases = state?.testCases?.testCases || [];
+    const allBugs = state?.bugs?.bugs || [];
+    const allRecommendations = state?.recommendations?.recommendations || [];
+
+    // Filter assets by sprint using utility
     const assets = useMemo(() => {
         if (!sprint?.id) {
             return {
@@ -37,38 +50,13 @@ const SprintDashboard = ({ sprintId }) => {
             };
         }
 
-        const allTestCases = state?.testCases?.testCases || [];
-        const allBugs = state?.bugs?.bugs || [];
-        const allRecommendations = state?.recommendations?.recommendations || [];
+        return filterAssetsBySprint(sprint.id, allTestCases, allBugs, allRecommendations);
+    }, [sprint?.id, allTestCases, allBugs, allRecommendations]);
 
-        const filteredTestCases = allTestCases.filter(tc => 
-            (tc.sprint_id === sprint.id || tc.sprintId === sprint.id) &&
-            tc.status !== 'deleted' && tc.status !== 'archived'
-        );
-
-        const filteredBugs = allBugs.filter(bug => 
-            (bug.sprint_id === sprint.id || bug.sprintId === sprint.id) &&
-            bug.status !== 'deleted' && bug.status !== 'archived'
-        );
-
-        const filteredRecommendations = allRecommendations.filter(rec => 
-            (rec.sprint_id === sprint.id || rec.sprintId === sprint.id) &&
-            rec.status !== 'deleted' && rec.status !== 'archived'
-        );
-
-        console.log('📊 Sprint assets filtered from global state:', {
-            sprintId: sprint.id,
-            testCases: filteredTestCases.length,
-            bugs: filteredBugs.length,
-            recommendations: filteredRecommendations.length
-        });
-
-        return {
-            testCases: filteredTestCases,
-            bugs: filteredBugs,
-            recommendations: filteredRecommendations
-        };
-    }, [sprint?.id, state?.testCases?.testCases, state?.bugs?.bugs, state?.recommendations?.recommendations]);
+    // Calculate metrics using utility
+    const metrics = useMemo(() => {
+        return getSprintMetrics(sprint, allTestCases, allBugs, allRecommendations);
+    }, [sprint, allTestCases, allBugs, allRecommendations]);
 
     useEffect(() => {
         // Simulate loading for smoother UX
@@ -77,170 +65,25 @@ const SprintDashboard = ({ sprintId }) => {
         return () => clearTimeout(timer);
     }, [sprint?.id]);
 
-    // ✅ FIXED: Case-insensitive status checks with accurate completion logic
-    const isTestCaseCompleted = (status) => {
-        const normalizedStatus = (status || '').toLowerCase();
-        return normalizedStatus === 'passed' || 
-               normalizedStatus === 'completed' || 
-               normalizedStatus === 'success';
-    };
-
-    const isBugResolved = (status) => {
-        const normalizedStatus = (status || '').toLowerCase();
-        return normalizedStatus === 'resolved' || 
-               normalizedStatus === 'closed' || 
-               normalizedStatus === 'fixed';
-    };
-
-    const isRecommendationImplemented = (status) => {
-        const normalizedStatus = (status || '').toLowerCase();
-        return normalizedStatus === 'implemented' || 
-               normalizedStatus === 'completed' || 
-               normalizedStatus === 'done';
-    };
-
-    // ✅ FIXED: Real-time metrics calculation with accurate status checks
-    const getSprintMetrics = () => {
-        const totalTestCases = assets.testCases.length;
-        const completedTestCases = assets.testCases.filter(tc => 
-            isTestCaseCompleted(tc.status)
-        ).length;
-
-        const totalBugs = assets.bugs.length;
-        const resolvedBugs = assets.bugs.filter(bug => 
-            isBugResolved(bug.status)
-        ).length;
-
-        const totalRecommendations = assets.recommendations.length;
-        const implementedRecommendations = assets.recommendations.filter(rec =>
-            isRecommendationImplemented(rec.status)
-        ).length;
-
-        const totalAssets = totalTestCases + totalBugs + totalRecommendations;
-        const completedAssets = completedTestCases + resolvedBugs + implementedRecommendations;
-
-        return {
-            totalAssets,
-            completedAssets,
-            completionRate: totalAssets > 0 ? Math.round((completedAssets / totalAssets) * 100) : 0,
-            testCases: {
-                total: totalTestCases,
-                completed: completedTestCases,
-                rate: totalTestCases > 0 ? Math.round((completedTestCases / totalTestCases) * 100) : 0
-            },
-            bugs: {
-                total: totalBugs,
-                resolved: resolvedBugs,
-                rate: totalBugs > 0 ? Math.round((resolvedBugs / totalBugs) * 100) : 0
-            },
-            recommendations: {
-                total: totalRecommendations,
-                implemented: implementedRecommendations,
-                rate: totalRecommendations > 0 ? Math.round((implementedRecommendations / totalRecommendations) * 100) : 0
-            }
-        };
-    };
-
-    // ✅ FIXED: Accurate status badge function with case-insensitive checks
-    const getTestCaseStatusBadge = (status) => {
-        const normalizedStatus = (status || '').toLowerCase();
-        
-        if (normalizedStatus === 'passed' || normalizedStatus === 'completed' || normalizedStatus === 'success') {
-            return 'bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-300';
-        } else if (normalizedStatus === 'failed' || normalizedStatus === 'failure') {
-            return 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300';
-        } else if (normalizedStatus === 'in-progress' || normalizedStatus === 'in progress' || normalizedStatus === 'running') {
-            return 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300';
-        } else if (normalizedStatus === 'blocked') {
-            return 'bg-orange-100 dark:bg-orange-950 text-orange-800 dark:text-orange-300';
-        } else {
-            return 'bg-muted text-muted-foreground';
-        }
-    };
-
-    const getBugStatusBadge = (status) => {
-        const normalizedStatus = (status || '').toLowerCase();
-        
-        if (normalizedStatus === 'resolved' || normalizedStatus === 'closed' || normalizedStatus === 'fixed') {
-            return 'bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-300';
-        } else if (normalizedStatus === 'in-progress' || normalizedStatus === 'in progress') {
-            return 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300';
-        } else if (normalizedStatus === 'open' || normalizedStatus === 'new') {
-            return 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300';
-        } else if (normalizedStatus === 'on-hold' || normalizedStatus === 'blocked') {
-            return 'bg-yellow-100 dark:bg-yellow-950 text-yellow-800 dark:text-yellow-300';
-        } else {
-            return 'bg-muted text-muted-foreground';
-        }
-    };
-
-    const getRecommendationStatusBadge = (status) => {
-        const normalizedStatus = (status || '').toLowerCase();
-        
-        if (normalizedStatus === 'implemented' || normalizedStatus === 'completed' || normalizedStatus === 'done') {
-            return 'bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-300';
-        } else if (normalizedStatus === 'rejected' || normalizedStatus === 'declined') {
-            return 'bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300';
-        } else if (normalizedStatus === 'in-progress' || normalizedStatus === 'in progress') {
-            return 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300';
-        } else if (normalizedStatus === 'pending' || normalizedStatus === 'new') {
-            return 'bg-yellow-100 dark:bg-yellow-950 text-yellow-800 dark:text-yellow-300';
-        } else {
-            return 'bg-muted text-muted-foreground';
-        }
-    };
-
     const getStatusInfo = (status) => {
+        const info = getSprintStatusInfo(status);
+        let icon;
         switch (status) {
             case 'active':
-                return { 
-                    icon: Play, 
-                    color: 'text-success', 
-                    bgColor: 'bg-green-100 dark:bg-green-950', 
-                    label: 'Active' 
-                };
+                icon = Play;
+                break;
             case 'completed':
-                return { 
-                    icon: CheckCircle, 
-                    color: 'text-info', 
-                    bgColor: 'bg-blue-100 dark:bg-blue-950', 
-                    label: 'Completed' 
-                };
+                icon = CheckCircle;
+                break;
             case 'on-hold':
-                return { 
-                    icon: Pause, 
-                    color: 'text-warning', 
-                    bgColor: 'bg-yellow-100 dark:bg-yellow-950', 
-                    label: 'On Hold' 
-                };
+                icon = Pause;
+                break;
             case 'planning':
             default:
-                return { 
-                    icon: Clock, 
-                    color: 'text-muted-foreground', 
-                    bgColor: 'bg-muted', 
-                    label: 'Planning' 
-                };
+                icon = Clock;
+                break;
         }
-    };
-
-    const getDaysRemaining = () => {
-        if (!sprint?.endDate) return null;
-        const end = typeof sprint.endDate === 'string' ? new Date(sprint.endDate) : sprint.endDate;
-        const today = new Date();
-        const diffTime = end - today;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays;
-    };
-
-    const formatDate = (date) => {
-        if (!date) return '';
-        const d = typeof date === 'string' ? new Date(date) : date;
-        return d.toLocaleDateString('en-US', { 
-            month: 'short', 
-            day: 'numeric',
-            year: 'numeric'
-        });
+        return { ...info, icon };
     };
 
     if (!sprint) {
@@ -255,8 +98,7 @@ const SprintDashboard = ({ sprintId }) => {
 
     const statusInfo = getStatusInfo(sprint.status);
     const StatusIcon = statusInfo.icon;
-    const metrics = getSprintMetrics();
-    const daysRemaining = getDaysRemaining();
+    const daysRemaining = getDaysRemaining(sprint.endDate);
 
     return (
         <div className="space-y-6">
@@ -489,7 +331,7 @@ const SprintDashboard = ({ sprintId }) => {
                                                 </div>
                                                 
                                                 <div className="shrink-0">
-                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getTestCaseStatusBadge(testCase.status)}`}>
+                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeClasses.testCase(testCase.status)}`}>
                                                         {testCase.status || 'pending'}
                                                     </span>
                                                 </div>
@@ -548,7 +390,7 @@ const SprintDashboard = ({ sprintId }) => {
                                                 </div>
                                                 
                                                 <div className="shrink-0">
-                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getBugStatusBadge(bug.status)}`}>
+                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeClasses.bug(bug.status)}`}>
                                                         {bug.status || 'open'}
                                                     </span>
                                                 </div>
@@ -607,7 +449,7 @@ const SprintDashboard = ({ sprintId }) => {
                                                 </div>
                                                 
                                                 <div className="shrink-0">
-                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getRecommendationStatusBadge(rec.status)}`}>
+                                                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadgeClasses.recommendation(rec.status)}`}>
                                                         {rec.status || 'pending'}
                                                     </span>
                                                 </div>

@@ -111,6 +111,10 @@ const AIBugGeneratorButton = ({ className = "", onBugCreated }) => {
           stepsToReproduce = '';
         }
 
+        // Create category tag safely
+        const categoryLower = safeToLowerCase(aiBugData.category);
+        const categoryTag = categoryLower ? categoryLower.replace(/\s+/g, '_') : 'uncategorized';
+
         // Build the complete bug data following the manual bug creation pattern
         const bugData = {
           title: String(aiBugData.title || '').trim(),
@@ -124,13 +128,13 @@ const AIBugGeneratorButton = ({ className = "", onBugCreated }) => {
           status: "New",
           priority: priority,
           severity: aiBugData.severity,
-          category: aiBugData.category,
+          category: aiBugData.category || 'Uncategorized',
           module: finalModule,
           module_id: moduleId,
           customModule: moduleId === 'other' ? aiBugData.customModule : null,
           sprint_id: sprintId,
           sprintId: sprintId,
-          tags: [safeToLowerCase(aiBugData.category).replace(/\s+/g, '_')],
+          tags: [categoryTag],
           source: "AI Generated",
           creationType: "ai",
           environment: aiBugData.environment || "Production",
@@ -210,7 +214,7 @@ const AIBugGeneratorButton = ({ className = "", onBugCreated }) => {
   return (
     <button
       type="button"
-      className={`group px-3 py-2 text-sm bg-gradient-to-r from-purple-600 to-blue-600 text-white border border-purple-700 hover:from-purple-700 hover:to-blue-700 hover:shadow-lg rounded flex items-center space-x-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+      className={`group px-3 py-2 text-sm bg-orange-500 text-white border hover:bg-orange-600 hover:shadow-lg rounded flex items-center space-x-2 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
       onClick={handleClick}
       disabled={!canCreateBugs || !hasActiveSubscription}
       title="Generate bug report with AI"

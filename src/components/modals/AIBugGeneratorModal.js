@@ -6,7 +6,8 @@ import {
   XCircleIcon, 
   CheckCircleIcon, 
   PaperAirplaneIcon, 
-  PencilIcon,
+  PencilIcon, 
+  ChartBarIcon,
   XMarkIcon
 } from '@heroicons/react/24/outline';
 import { useAI } from '@/context/AIContext';
@@ -49,7 +50,7 @@ const AIBugGeneratorModal = ({ isOpen, onClose, onSubmit, preFillData = null }) 
   const [isSubmittingReport, setIsSubmittingReport] = useState(false);
   const [attachments, setAttachments] = useState([]);
   const [error, setError] = useState('');
-  const [ setAiGenerationMetadata] = useState(null);
+  const [aiGenerationMetadata, setAiGenerationMetadata] = useState(null);
   const [teamMembers, setTeamMembers] = useState([]);
 
   // Get sprints and modules from global state

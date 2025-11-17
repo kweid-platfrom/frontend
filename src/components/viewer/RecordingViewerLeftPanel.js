@@ -2,9 +2,8 @@
 'use client'
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Terminal, Network, Bug, Info, MessageSquare, CheckCircle, AlertTriangle, Bot } from 'lucide-react';
+import { Terminal, Network, Bug, Info, MessageSquare, CheckCircle, AlertTriangle, Bot, Copy, Check } from 'lucide-react';
 import AIHighlights from '../recorder/AIHighlights';
-import { useAIBugGenerator } from '@/context/AIBugGeneratorContext';
 
 const RecordingViewerLeftPanel = ({ 
   recording,
@@ -14,11 +13,10 @@ const RecordingViewerLeftPanel = ({
   const [activeTab, setActiveTab] = useState('comments');
   const [commentText, setCommentText] = useState('');
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
-  const [selectedBugs, setSelectedBugs] = useState([]);
+  const [copiedIssues, setCopiedIssues] = useState(new Set());
   const [showAIInsights, setShowAIInsights] = useState(true);
   const [aiInsights, setAiInsights] = useState([]);
   const commentsEndRef = useRef(null);
-  const { openGenerator } = useAIBugGenerator();
 
   const formatTime = (s) => {
     if (!s || isNaN(s)) return '0:00';
@@ -32,6 +30,34 @@ const RecordingViewerLeftPanel = ({
     videoRef.current.currentTime = seconds;
     if (videoRef.current.paused) {
       videoRef.current.play();
+    }
+  };
+
+  // Load copied issues from persistent storage on mount
+  useEffect(() => {
+    const loadCopiedIssues = async () => {
+      try {
+        const result = await window.storage.get('copied-issues', false);
+        if (result && result.value) {
+          const issueIds = JSON.parse(result.value);
+          setCopiedIssues(new Set(issueIds));
+        }
+      } catch (error) {
+        console.log('No copied issues found in storage');
+      }
+    };
+    
+    if (window.storage) {
+      loadCopiedIssues();
+    }
+  }, []);
+
+  // Save copied issues to persistent storage
+  const saveCopiedIssues = async (issueIds) => {
+    try {
+      await window.storage.set('copied-issues', JSON.stringify(Array.from(issueIds)), false);
+    } catch (error) {
+      console.error('Failed to save copied issues:', error);
     }
   };
 
@@ -80,16 +106,17 @@ const RecordingViewerLeftPanel = ({
     setActiveTab('comments');
   };
 
-  // Create bug from detected issue - just open AI modal with pre-filled data
-  const createBugFromIssue = (issue) => {
-    const issueDescription = `Detected Issue from Screen Recording
+  // Copy issue details to clipboard
+  const copyIssueToClipboard = async (issue) => {
+    const issueDetails = `Issue Report - ${recording?.title || 'Recording'}
 
 Issue Type: ${issue.type}
 Severity: ${issue.severity}
-Time Detected: ${formatTime(issue.time)}
-Source: ${issue.source || 'Screen Recording'}
+Time: ${formatTime(issue.time)}
+Timestamp: ${new Date(issue.timestamp || Date.now()).toLocaleString()}
+Recording ID: ${recording?.id || 'N/A'}
 
-Details:
+Description:
 ${issue.message}
 
 ${issue.requestData ? `
@@ -98,36 +125,24 @@ Network Request Details:
 - Method: ${issue.requestData.method || 'N/A'}
 - Status: ${issue.requestData.status || 'N/A'}
 - Error: ${issue.requestData.error || 'N/A'}
-` : ''}`;
+` : ''}
 
-    const consoleErrorText = issue.source === 'console' ? issue.message : '';
+${issue.source === 'console' ? `Console Error:
+${issue.message}` : ''}
 
-    // Open AI Bug Generator with pre-filled data
-    // The modal context handles everything else including bug creation
-    openGenerator(
-      (generatedBugData) => {
-        // Mark this issue as processed
-        setSelectedBugs(prev => [...prev, issue.id]);
-        
-        // Add recording metadata to the bug data
-        return {
-          ...generatedBugData,
-          source: 'screen_recording',
-          recordingData: {
-            consoleLogs: issue.source === 'console' ? [issue] : [],
-            networkLogs: issue.source === 'network' ? [issue.requestData] : [],
-            issueId: issue.id,
-            recordingTime: issue.time,
-            recordingTitle: recording?.title || 'Untitled Recording',
-            recordingId: recording?.id
-          },
-        };
-      },
-      {
-        initialPrompt: issueDescription,
-        initialConsoleError: consoleErrorText
-      }
-    );
+---
+Recorded at: ${new Date().toLocaleString()}`;
+
+    try {
+      await navigator.clipboard.writeText(issueDetails);
+      
+      // Update copied issues set and save to storage
+      const newCopiedIssues = new Set([...copiedIssues, issue.id]);
+      setCopiedIssues(newCopiedIssues);
+      await saveCopiedIssues(newCopiedIssues);
+    } catch (error) {
+      console.error('Failed to copy to clipboard:', error);
+    }
   };
 
   // Handle AI insights actions
@@ -160,80 +175,6 @@ Network Request Details:
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-  };
-
-  // Handle test case creation from AI insight
-  const handleCreateTestCaseFromInsight = (insight) => {
-    const testCasePrompt = `Create Test Case from AI Insight
-
-Title: ${insight.title || 'Test Case'}
-Description: ${insight.description}
-Severity: ${insight.severity}
-Category: ${insight.category || 'AI Generated'}
-Recommendation: ${insight.recommendation || 'N/A'}
-
-Recording Context:
-- Recording: ${recording?.title || 'Untitled Recording'}
-- Time: ${formatTime(insight.time || 0)}
-- Confidence: ${(insight.confidence || 0) * 100}%`;
-
-    openGenerator(
-      (generatedData) => {
-        return {
-          ...generatedData,
-          source: 'ai_insight',
-          recordingData: {
-            aiInsight: insight,
-            recordingId: recording?.id,
-            recordingTitle: recording?.title,
-            recordingTime: insight.time
-          }
-        };
-      },
-      {
-        initialPrompt: testCasePrompt
-      }
-    );
-  };
-
-  // Handle bug creation from AI insight
-  const handleCreateBugFromInsight = (insight) => {
-    const bugPrompt = `AI Detected Bug from Recording Analysis
-
-Issue: ${insight.title || insight.description}
-Severity: ${insight.severity}
-Category: ${insight.category || 'AI Detected'}
-Confidence: ${(insight.confidence || 0) * 100}%
-
-Description:
-${insight.description}
-
-Recommendation:
-${insight.recommendation || 'Review and fix the identified issue'}
-
-Recording Details:
-- Recording: ${recording?.title || 'Untitled Recording'}
-- Time: ${formatTime(insight.time || 0)}
-- Automation Potential: ${insight.automationPotential || 'medium'}`;
-
-    openGenerator(
-      (generatedData) => {
-        return {
-          ...generatedData,
-          source: 'ai_insight',
-          recordingData: {
-            aiInsight: insight,
-            relatedLogs: insight.relatedLogs || [],
-            recordingId: recording?.id,
-            recordingTitle: recording?.title,
-            recordingTime: insight.time
-          }
-        };
-      },
-      {
-        initialPrompt: bugPrompt
-      }
-    );
   };
 
   const toggleAIInsights = () => {
@@ -296,8 +237,6 @@ Recording Details:
                 isEnabled={showAIInsights}
                 onToggle={toggleAIInsights}
                 onSaveHighlights={handleSaveInsights}
-                onCreateTestCase={handleCreateTestCaseFromInsight}
-                onCreateBug={handleCreateBugFromInsight}
                 className="space-y-2"
               />
             </div>
@@ -501,61 +440,71 @@ Recording Details:
                   </div>
                 </div>
               ) : (
-                recording.detectedIssues.map((issue) => (
-                  <div
-                    key={issue.id}
-                    className={`p-2 sm:p-3 rounded border-l-4 ${
-                      issue.severity === 'high' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' :
-                      issue.severity === 'medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' :
-                      'border-teal-500 bg-teal-50 dark:bg-teal-900/20'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center flex-wrap gap-1 sm:gap-2 mb-1">
-                          <AlertTriangle className={`w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0 ${
-                            issue.severity === 'high' ? 'text-red-600' :
-                            issue.severity === 'medium' ? 'text-orange-500' :
-                            'text-teal-600'
-                          }`} />
-                          <span className="text-xs sm:text-sm font-medium capitalize truncate">
-                            {issue.type.replace('_', ' ')}
-                          </span>
-                          <span className={`text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 sm:py-1 rounded uppercase font-medium ${
-                            issue.severity === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                            issue.severity === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
-                            'bg-teal-100 text-teal-600 dark:bg-teal-900 dark:text-teal-300'
-                          }`}>
-                            {issue.severity}
-                          </span>
-                          {(issue.count && issue.count > 1) && (
-                            <span className="text-[9px] sm:text-[10px] bg-gray-200 text-gray-600 px-1 rounded">
-                              {issue.count}x
+                recording.detectedIssues.map((issue) => {
+                  const isIssueCopied = copiedIssues.has(issue.id);
+                  
+                  return (
+                    <div
+                      key={issue.id}
+                      className={`p-2 sm:p-3 rounded border-l-4 ${
+                        issue.severity === 'high' ? 'border-red-500 bg-red-50 dark:bg-red-900/20' :
+                        issue.severity === 'medium' ? 'border-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' :
+                        'border-teal-500 bg-teal-50 dark:bg-teal-900/20'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center flex-wrap gap-1 sm:gap-2 mb-1">
+                            <AlertTriangle className={`w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0 ${
+                              issue.severity === 'high' ? 'text-red-600' :
+                              issue.severity === 'medium' ? 'text-orange-500' :
+                              'text-teal-600'
+                            }`} />
+                            <span className="text-xs sm:text-sm font-medium capitalize truncate">
+                              {issue.type.replace('_', ' ')}
                             </span>
-                          )}
+                            <span className={`text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 sm:py-1 rounded uppercase font-medium ${
+                              issue.severity === 'high' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                              issue.severity === 'medium' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                              'bg-teal-100 text-teal-600 dark:bg-teal-900 dark:text-teal-300'
+                            }`}>
+                              {issue.severity}
+                            </span>
+                            {(issue.count && issue.count > 1) && (
+                              <span className="text-[9px] sm:text-[10px] bg-gray-200 text-gray-600 px-1 rounded">
+                                {issue.count}x
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 mb-1 break-words">{issue.message}</div>
+                          <button
+                            onClick={() => seekTo(issue.time)}
+                            className="text-[9px] sm:text-[10px] text-teal-600 hover:text-teal-700 dark:text-teal-400 hover:underline"
+                          >
+                            Jump to {formatTime(issue.time)}
+                          </button>
                         </div>
-                        <div className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-400 mb-1 break-words">{issue.message}</div>
-                        <button
-                          onClick={() => seekTo(issue.time)}
-                          className="text-[9px] sm:text-[10px] text-teal-600 hover:text-teal-700 dark:text-teal-400 hover:underline"
-                        >
-                          Jump to {formatTime(issue.time)}
-                        </button>
+                        
+                        {/* Copy Button */}
+                        {isIssueCopied ? (
+                          <div className="flex-shrink-0 px-2 py-1 text-[9px] sm:text-[10px] rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 flex items-center space-x-1">
+                            <Check className="w-3 h-3" />
+                            <span>Copied</span>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => copyIssueToClipboard(issue)}
+                            className="flex-shrink-0 px-1.5 sm:px-2 py-1 text-[9px] sm:text-[10px] rounded transition-all bg-blue-600 text-white hover:bg-blue-700 hover:shadow-lg flex items-center space-x-1"
+                            title="Copy issue details to clipboard"
+                          >
+                            <Copy className="w-3 h-3" />
+                            <span className="hidden sm:inline">Copy</span>
+                          </button>
+                        )}
                       </div>
-                      <button
-                        onClick={() => createBugFromIssue(issue)}
-                        className={`flex-shrink-0 px-1.5 sm:px-2 py-1 text-[9px] sm:text-[10px] rounded transition-colors ${
-                          selectedBugs.includes(issue.id)
-                            ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                            : 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700'
-                        }`}
-                        disabled={selectedBugs.includes(issue.id)}
-                      >
-                        {selectedBugs.includes(issue.id) ? 'Created' : 'AI Bug'}
-                      </button>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           )}
